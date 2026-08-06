@@ -1,0 +1,16 @@
+{
+  "name": "Burger Week",
+  "short_name": "Burger Week",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fff8dd",
+  "theme_color": "#f6c82f",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

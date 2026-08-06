@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6c82f">
+    <title>Burger Week</title>
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="hero">
+      <img src="assets/burger-counter-hero.png" alt="" class="hero-art">
+      <div class="hero-shade"></div>
+      <nav class="topbar" aria-label="Primary">
+        <a class="brand" href="#feed" aria-label="Burger Week home">
+          <span class="brand-mark" aria-hidden="true">BW</span>
+          <span>Burger Week</span>
+        </a>
+        <div class="topbar-actions">
+          <a class="event-link" href="https://everout.com/portland/events/the-portland-mercurys-burger-week-2026/e222750/" target="_blank" rel="noreferrer">Official Event</a>
+          <select id="eventPicker" aria-label="Event">
+            <option value="burger-week-2026">Burger Week 2026</option>
+            <!-- <option value="future-week-template">Future Week Template</option> -->
+          </select>
+          <button class="auth-button" id="authButton" type="button">Log In</button>
+        </div>
+      </nav>
+      <div class="hero-copy">
+        <p class="eyebrow">Aug 10-16, 2026 · $10 burgers</p>
+        <h1>Burger Week</h1>
+        <p class="lede">Find the best burger in the city</p>
+        <button class="primary-action" id="openComposer" type="button">Add Review</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="controls-band" aria-label="Review controls">
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="toolbar">
+          <label class="search">
+            <span>Search</span>
+            <input id="searchInput" type="search" placeholder="Burger, spot, friend, notes">
+          </label>
+          <label>
+            <span>Area</span>
+            <select id="neighborhoodFilter"></select>
+          </label>
+          <label>
+            <span>Friend</span>
+            <select id="friendFilter"></select>
+          </label>
+          <label>
+            <span>Min rating</span>
+            <select id="ratingFilter">
+              <option value="0">Any</option>
+              <option value="5">5 stars</option>
+              <option value="4">4+ stars</option>
+              <option value="3">3+ stars</option>
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select id="sortSelect">
+              <option value="recent">Newest</option>
+              <option value="rating">Highest rated</option>
+              <option value="restaurant">Restaurant A-Z</option>
+              <option value="available">Available soonest</option>
+            </select>
+          </label>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Views">
+          <button class="tab is-active" type="button" data-view="feed" role="tab" aria-selected="true">Feed</button>
+          <button class="tab" type="button" data-view="burgers" role="tab" aria-selected="false">Burgers</button>
+          <button class="tab" type="button" data-view="map" role="tab" aria-selected="false">Map</button>
+          <button class="tab" type="button" data-view="calendar" role="tab" aria-selected="false">Calendar</button>
+        </div>
+      </section>
+
+      <section id="feedView" class="view is-active" aria-labelledby="feedTitle">
+        <div class="section-heading">
+          <h2 id="feedTitle">Friend Feed</h2>
+          <p id="resultCount"></p>
+        </div>
+        <div class="review-grid" id="reviewGrid"></div>
+      </section>
+
+      <section id="burgersView" class="view" aria-labelledby="burgersTitle">
+        <div class="section-heading">
+          <h2 id="burgersTitle">Burger Board</h2>
+          <p>Open targets, hot streaks, and the next thing to try.</p>
+        </div>
+        <div class="hype-list" id="hypeList" aria-label="Most wished-for burgers"></div>
+        <div class="burger-list" id="burgerList"></div>
+      </section>
+
+      <section id="mapView" class="view" aria-labelledby="mapTitle">
+        <div class="section-heading">
+          <h2 id="mapTitle">Map Preview</h2>
+          <p>Grouped by area for fast route planning.</p>
+        </div>
+        <div class="map-shell">
+          <div class="portland-map" id="mapPins" aria-label="Burger locations by area"></div>
+          <aside class="map-list" id="mapList"></aside>
+        </div>
+      </section>
+
+      <section id="calendarView" class="view" aria-labelledby="calendarTitle">
+        <div class="section-heading">
+          <h2 id="calendarTitle">Week Calendar</h2>
+          <p>August 10-16, 2026.</p>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+      </section>
+    </main>
+
+    <dialog id="reviewDialog" class="review-dialog">
+      <form id="reviewForm" method="dialog">
+        <div class="dialog-top">
+          <h2>Add a Review</h2>
+          <button class="icon-button" type="button" id="closeComposer" aria-label="Close">x</button>
+        </div>
+        <label>
+          <span>Posting as</span>
+          <input id="reviewerInput" name="reviewer" required readonly placeholder="Log in first">
+        </label>
+        <label>
+          <span>Burger</span>
+          <select id="burgerSelect" name="burgerId" required></select>
+        </label>
+        <fieldset class="star-field">
+          <legend>Rating</legend>
+          <output id="ratingOutput" for="starInput">5.00</output>
+          <div class="stars" id="starInput" role="radiogroup" aria-label="Rating out of 5"></div>
+          <input id="ratingInput" name="rating" type="hidden" value="5">
+        </fieldset>
+        <label>
+          <span>Photo</span>
+          <input id="photoInput" name="photo" type="file" accept="image/*">
+        </label>
+        <label>
+          <span>Notes</span>
+          <textarea id="notesInput" name="notes" rows="4" placeholder="Sauce, texture, line length, would-order-again energy"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost-button" type="button" id="clearLocalData">Clear Local Reviews</button>
+          <button class="primary-action" type="submit">Post Review</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="loginDialog" class="review-dialog">
+      <form id="loginForm" method="dialog">
+        <div class="dialog-top">
+          <h2>Log In</h2>
+          <button class="icon-button" type="button" id="closeLogin" aria-label="Close">x</button>
+        </div>
+        <label>
+          <span>Name</span>
+          <input id="loginNameInput" name="displayName" required placeholder="Your name">
+        </label>
+        <label>
+          <span>Email</span>
+          <input id="loginEmailInput" name="email" type="email" required placeholder="you@example.com">
+        </label>
+        <p class="dialog-note">This local login keeps reviews tied to your profile on this device. Supabase Auth can replace it when the shared backend is connected.</p>
+        <section class="profile-panel" aria-label="Hidden burgers">
+          <div class="profile-panel-heading">
+            <h3>Hidden Burgers</h3>
+            <span id="hiddenCount">0 hidden</span>
+          </div>
+          <div class="hidden-list" id="hiddenList"></div>
+        </section>
+        <div class="dialog-actions">
+          <button class="ghost-button" type="button" id="logoutButton">Log Out</button>
+          <button class="primary-action" type="submit">Continue</button>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="emptyTemplate">
+      <div class="empty-state">
+        <h3>No matching reviews yet.</h3>
+        <p>Change filters or add the first one.</p>
+      </div>
+    </template>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

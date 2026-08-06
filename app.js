@@ -1,0 +1,1068 @@
+const officialEventUrl = "https://everout.com/portland/events/the-portland-mercurys-burger-week-2026/e222750/";
+const reviewStoreKey = "burger-week-reviews-v2";
+const accountStoreKey = "burger-week-account-v1";
+const wantStoreKey = "burger-week-wants-v1";
+const hiddenStoreKey = "burger-week-hidden-v1";
+const dayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
+const timestampFormatter = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit"
+});
+
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+const els = {
+  eventPicker: $("#eventPicker"),
+  statsGrid: $("#statsGrid"),
+  searchInput: $("#searchInput"),
+  neighborhoodFilter: $("#neighborhoodFilter"),
+  friendFilter: $("#friendFilter"),
+  ratingFilter: $("#ratingFilter"),
+  sortSelect: $("#sortSelect"),
+  tabs: $$(".tab"),
+  views: $$(".view"),
+  reviewGrid: $("#reviewGrid"),
+  burgerList: $("#burgerList"),
+  hypeList: $("#hypeList"),
+  resultCount: $("#resultCount"),
+  mapPins: $("#mapPins"),
+  mapList: $("#mapList"),
+  calendarGrid: $("#calendarGrid"),
+  dialog: $("#reviewDialog"),
+  openComposer: $("#openComposer"),
+  closeComposer: $("#closeComposer"),
+  reviewForm: $("#reviewForm"),
+  burgerSelect: $("#burgerSelect"),
+  starInput: $("#starInput"),
+  ratingInput: $("#ratingInput"),
+  ratingOutput: $("#ratingOutput"),
+  photoInput: $("#photoInput"),
+  clearLocalData: $("#clearLocalData"),
+  authButton: $("#authButton"),
+  loginDialog: $("#loginDialog"),
+  loginForm: $("#loginForm"),
+  loginNameInput: $("#loginNameInput"),
+  loginEmailInput: $("#loginEmailInput"),
+  closeLogin: $("#closeLogin"),
+  logoutButton: $("#logoutButton"),
+  reviewerInput: $("#reviewerInput"),
+  hiddenList: $("#hiddenList"),
+  hiddenCount: $("#hiddenCount")
+};
+
+let events = {};
+let currentEventId = "burger-week-2026";
+let currentRating = 5;
+let photoViewByReview = {};
+let openReviewAfterLogin = false;
+let pendingWantBurgerId = "";
+let pendingHideBurgerId = "";
+let filters = {
+  search: "",
+  neighborhood: "all",
+  friend: "all",
+  rating: 0,
+  sort: "recent"
+};
+
+function fallbackEvent() {
+  const dates = ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-16"];
+  const neighborhoods = ["Downtown", "Glendoveer", "North Portland", "Northeast", "Northwest", "Southeast", "Southwest"];
+  const burgers = [
+    {
+      id: "von-ebert-glendoveer",
+      restaurant: "Von Ebert Brewing Glendoveer",
+      burger: "Event burger TBD",
+      description: "Replace with the official Burger Week description.",
+      neighborhood: "Glendoveer",
+      address: "Portland, OR",
+      available: dates,
+      hours: "Replace with event hours.",
+      tags: ["beer", "source-backed"],
+      restaurantPhoto: "data/photos/restaurant-placeholder.svg",
+      photoAlt: "Restaurant-posted burger photo placeholder",
+      mapsUrl: "https://maps.apple.com/?q=Von%20Ebert%20Brewing%20Glendoveer%20Portland%20OR",
+      everoutUrl: officialEventUrl,
+      map: { x: 74, y: 43 }
+    },
+    ...Array.from({ length: 123 }, (_, index) => {
+      const number = index + 2;
+      const neighborhood = neighborhoods[number % neighborhoods.length];
+      return {
+        id: `burger-${String(number).padStart(3, "0")}`,
+        restaurant: `Burger Week Placeholder ${String(number).padStart(3, "0")}`,
+        burger: "Burger details TBD",
+        description: "Replace this row with a participating restaurant from EverOut.",
+        neighborhood,
+        address: "Portland, OR",
+        available: dates,
+        hours: "Replace with event hours.",
+        tags: ["placeholder"],
+        restaurantPhoto: "data/photos/restaurant-placeholder.svg",
+        photoAlt: "Restaurant-posted burger photo placeholder",
+        mapsUrl: `https://maps.apple.com/?q=${encodeURIComponent(`Burger Week Placeholder ${number} Portland OR`)}`,
+        everoutUrl: officialEventUrl,
+        map: { x: 18 + ((number * 11) % 68), y: 13 + ((number * 17) % 72) }
+      };
+    })
+  ];
+
+  return {
+    "burger-week-2026": {
+      title: "Burger Week 2026",
+      city: "Portland, OR",
+      price: "$10",
+      dates,
+      sourceUrl: officialEventUrl,
+      burgers,
+      reviews: [
+        {
+          id: "seed-1",
+          burgerId: "burger-004",
+          reviewer: "Avery",
+          rating: 4.5,
+          notes: "Messy in the correct way. Good char, excellent sauce ratio, needs extra napkins.",
+          photo: "",
+          createdAt: "2026-08-10T19:42:00-07:00"
+        },
+        {
+          id: "seed-2",
+          burgerId: "burger-008",
+          reviewer: "Morgan",
+          rating: 4,
+          notes: "Big flavor, crispy edges, and an easy weeknight stop.",
+          photo: "",
+          createdAt: "2026-08-11T12:20:00-07:00"
+        },
+        {
+          id: "seed-3",
+          burgerId: "von-ebert-glendoveer",
+          reviewer: "Sam",
+          rating: 5,
+          notes: "Worth crossing town for. Rich, balanced, and gone way too fast.",
+          photo: "",
+          createdAt: "2026-08-11T21:05:00-07:00"
+        }
+      ]
+    },
+    "dumpling-week-template": {
+      title: "Dumpling Week Template",
+      city: "Portland, OR",
+      price: "TBD",
+      dates: [],
+      sourceUrl: "",
+      burgers: [],
+      reviews: []
+    }
+  };
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(value = "") {
+  return escapeHtml(value);
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === '"' && inQuotes && next === '"') {
+      cell += '"';
+      i += 1;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+
+  const [headers, ...dataRows] = rows;
+  if (!headers) return [];
+  return dataRows.map((values) => Object.fromEntries(headers.map((header, index) => [header.trim(), (values[index] || "").trim()])));
+}
+
+function datesBetween(start, end, eventDates) {
+  if (!start || !end) return eventDates;
+  return eventDates.filter((date) => date >= start && date <= end);
+}
+
+function coordinateToMapPoint(latitude, longitude, fallbackIndex) {
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    const x = Math.min(88, Math.max(12, ((lon + 122.74) / 0.36) * 76 + 12));
+    const y = Math.min(88, Math.max(12, (1 - (lat - 45.42) / 0.22) * 76 + 12));
+    return { x, y };
+  }
+  return { x: 15 + ((fallbackIndex * 13) % 72), y: 12 + ((fallbackIndex * 19) % 76) };
+}
+
+function padBurgerList(burgers, targetCount, dates, sourceUrl) {
+  if (burgers.length >= targetCount) return burgers;
+  const neighborhoods = ["Southeast", "Northeast", "North Portland", "Downtown", "Northwest", "Southwest", "Glendoveer"];
+  const additions = Array.from({ length: targetCount - burgers.length }, (_, index) => {
+    const number = burgers.length + index + 1;
+    const padded = String(number).padStart(3, "0");
+    const restaurant = `Burger Week Placeholder ${padded}`;
+    return {
+      id: `burger-${padded}`,
+      restaurant,
+      burger: "Burger details TBD",
+      description: "Replace this generated placeholder by adding a row to data/burgers.csv.",
+      neighborhood: neighborhoods[number % neighborhoods.length],
+      address: "Portland OR",
+      available: dates,
+      hours: "Hours TBD",
+      tags: ["placeholder"],
+      restaurantPhoto: "data/photos/restaurant-placeholder.svg",
+      photoAlt: "Restaurant posted burger photo placeholder",
+      mapsUrl: `https://maps.apple.com/?q=${encodeURIComponent(`${restaurant} Portland OR`)}`,
+      everoutUrl: sourceUrl,
+      map: coordinateToMapPoint("", "", number)
+    };
+  });
+  return [...burgers, ...additions];
+}
+
+async function loadEvents() {
+  const fallback = fallbackEvent();
+  try {
+    const [eventResponse, burgerResponse] = await Promise.all([
+      fetch("data/events.json"),
+      fetch("data/burgers.csv")
+    ]);
+    if (!eventResponse.ok || !burgerResponse.ok) return fallback;
+
+    const eventList = await eventResponse.json();
+    const burgerRows = parseCsv(await burgerResponse.text());
+    const loadedEvents = {};
+
+    eventList.forEach((event) => {
+      const dates = event.starts_on && event.ends_on ? datesBetween(event.starts_on, event.ends_on, fallback["burger-week-2026"].dates) : [];
+      const sourceUrl = event.source_url || officialEventUrl;
+      const burgers = burgerRows
+        .filter((row) => row.event_id === event.id)
+        .map((row, index) => ({
+          id: row.id || `burger-${String(index + 1).padStart(3, "0")}`,
+          restaurant: row.restaurant || `Burger Week Placeholder ${String(index + 1).padStart(3, "0")}`,
+          burger: row.burger || "Burger details TBD",
+          description: row.description || "Replace with official listed burger details.",
+          neighborhood: row.neighborhood || "TBD",
+          address: row.address || "Portland, OR",
+          available: datesBetween(row.available_start || event.starts_on, row.available_end || event.ends_on, dates),
+          hours: row.hours || "Hours TBD",
+          tags: row.tags ? row.tags.split(";").filter(Boolean) : ["placeholder"],
+          restaurantPhoto: row.restaurant_photo || "data/photos/restaurant-placeholder.svg",
+          photoAlt: row.photo_alt || `${row.restaurant || "Restaurant"} official burger photo`,
+          mapsUrl: row.maps_url || `https://maps.apple.com/?q=${encodeURIComponent(`${row.restaurant || "Burger Week"} ${row.address || "Portland, OR"}`)}`,
+          everoutUrl: row.everout_url || sourceUrl,
+          map: coordinateToMapPoint(row.latitude, row.longitude, index)
+        }));
+
+      const targetCount = event.id === "burger-week-2026" ? 124 : burgers.length;
+      loadedEvents[event.id] = {
+        title: event.title,
+        city: event.city,
+        price: event.price_label,
+        dates,
+        sourceUrl,
+        burgers: padBurgerList(burgers, targetCount, dates, sourceUrl),
+        reviews: fallback[event.id]?.reviews || []
+      };
+    });
+
+    return { ...fallback, ...loadedEvents };
+  } catch {
+    return fallback;
+  }
+}
+
+function getEvent() {
+  return events[currentEventId];
+}
+
+function getAccount() {
+  try {
+    return JSON.parse(localStorage.getItem(accountStoreKey));
+  } catch {
+    return null;
+  }
+}
+
+function setAccount(account) {
+  if (account) {
+    localStorage.setItem(accountStoreKey, JSON.stringify(account));
+  } else {
+    localStorage.removeItem(accountStoreKey);
+  }
+  renderAuth();
+}
+
+function loadHidden() {
+  try {
+    return JSON.parse(localStorage.getItem(hiddenStoreKey)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveHidden(hidden) {
+  localStorage.setItem(hiddenStoreKey, JSON.stringify(hidden));
+}
+
+function accountHiddenEntries() {
+  const account = getAccount();
+  if (!account) return [];
+  return Object.values(loadHidden()[currentEventId]?.[account.id] || {});
+}
+
+function accountHiddenIds() {
+  const account = getAccount();
+  if (!account) return new Set();
+  return new Set(Object.keys(loadHidden()[currentEventId]?.[account.id] || {}));
+}
+
+function hideBurger(burgerId) {
+  const account = getAccount();
+  if (!account) {
+    pendingHideBurgerId = burgerId;
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const burger = getBurger(burgerId);
+  const hidden = loadHidden();
+  hidden[currentEventId] ||= {};
+  hidden[currentEventId][account.id] ||= {};
+  hidden[currentEventId][account.id][burgerId] = {
+    burgerId,
+    restaurant: burger.restaurant,
+    burger: burger.burger,
+    hiddenAt: new Date().toISOString()
+  };
+
+  saveHidden(hidden);
+  renderStats();
+  renderHiddenProfileList();
+  renderBurgerList();
+}
+
+function unhideBurger(burgerId) {
+  const account = getAccount();
+  if (!account) return;
+
+  const hidden = loadHidden();
+  if (hidden[currentEventId]?.[account.id]?.[burgerId]) {
+    delete hidden[currentEventId][account.id][burgerId];
+  }
+
+  if (hidden[currentEventId]?.[account.id] && !Object.keys(hidden[currentEventId][account.id]).length) {
+    delete hidden[currentEventId][account.id];
+  }
+
+  saveHidden(hidden);
+  renderStats();
+  renderHiddenProfileList();
+  renderBurgerList();
+}
+
+function loadWants() {
+  try {
+    return JSON.parse(localStorage.getItem(wantStoreKey)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveWants(wants) {
+  localStorage.setItem(wantStoreKey, JSON.stringify(wants));
+}
+
+function eventWants() {
+  return loadWants()[currentEventId] || {};
+}
+
+function burgerWantEntries(burgerId) {
+  return Object.values(eventWants()[burgerId] || {});
+}
+
+function accountWantsBurger(burgerId) {
+  const account = getAccount();
+  if (!account) return false;
+  return Boolean(eventWants()[burgerId]?.[account.id]);
+}
+
+function toggleWant(burgerId) {
+  const account = getAccount();
+  if (!account) {
+    pendingWantBurgerId = burgerId;
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const wants = loadWants();
+  wants[currentEventId] ||= {};
+  wants[currentEventId][burgerId] ||= {};
+
+  if (wants[currentEventId][burgerId][account.id]) {
+    delete wants[currentEventId][burgerId][account.id];
+  } else {
+    wants[currentEventId][burgerId][account.id] = {
+      displayName: account.displayName,
+      email: account.email,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  if (!Object.keys(wants[currentEventId][burgerId]).length) {
+    delete wants[currentEventId][burgerId];
+  }
+
+  saveWants(wants);
+  renderStats();
+  renderHypeList();
+  renderBurgerList();
+}
+
+function renderAuth() {
+  const account = getAccount();
+  els.authButton.textContent = account ? account.displayName : "Log In";
+  els.authButton.classList.toggle("is-logged-in", Boolean(account));
+  els.reviewerInput.value = account?.displayName || "";
+  renderHiddenProfileList();
+}
+
+function loadLocalReviews() {
+  try {
+    return JSON.parse(localStorage.getItem(reviewStoreKey)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalReviews(allReviews) {
+  localStorage.setItem(reviewStoreKey, JSON.stringify(allReviews));
+}
+
+function getBurger(id) {
+  return getEvent().burgers.find((burger) => burger.id === id) || {
+    id,
+    restaurant: "Unknown spot",
+    burger: "Unknown burger",
+    neighborhood: "Unknown",
+    tags: [],
+    available: [],
+    mapsUrl: "https://maps.apple.com/?q=Portland%20OR",
+    everoutUrl: officialEventUrl
+  };
+}
+
+function getReviews() {
+  const localReviews = loadLocalReviews()[currentEventId] || [];
+  return [...getEvent().reviews, ...localReviews].map((review) => ({
+    ...review,
+    burger: getBurger(review.burgerId)
+  }));
+}
+
+function formatRating(value) {
+  return Number(value).toFixed(2);
+}
+
+function accountIdFromEmail(email) {
+  return `local-${email.toLowerCase()}`;
+}
+
+function renderStars(rating) {
+  return Array.from({ length: 5 }, (_, index) => {
+    const value = index + 1;
+    return `<span class="${rating >= value ? "filled" : ""}" aria-hidden="true">★</span>`;
+  }).join("");
+}
+
+function hydrateFilters() {
+  const event = getEvent();
+  const reviews = getReviews();
+  const currentArea = filters.neighborhood;
+  const currentFriend = filters.friend;
+  const areas = ["all", ...new Set(event.burgers.map((burger) => burger.neighborhood).filter(Boolean))].sort();
+  const friends = ["all", ...new Set(reviews.map((review) => review.reviewer).filter(Boolean))].sort();
+
+  els.neighborhoodFilter.innerHTML = areas
+    .map((area) => `<option value="${escapeAttr(area)}">${area === "all" ? "All areas" : escapeHtml(area)}</option>`)
+    .join("");
+  els.friendFilter.innerHTML = friends
+    .map((friend) => `<option value="${escapeAttr(friend)}">${friend === "all" ? "Everyone" : escapeHtml(friend)}</option>`)
+    .join("");
+  els.burgerSelect.innerHTML = event.burgers
+    .map((burger) => `<option value="${escapeAttr(burger.id)}">${escapeHtml(burger.restaurant)} - ${escapeHtml(burger.burger)}</option>`)
+    .join("");
+
+  els.neighborhoodFilter.value = areas.includes(currentArea) ? currentArea : "all";
+  els.friendFilter.value = friends.includes(currentFriend) ? currentFriend : "all";
+  filters.neighborhood = els.neighborhoodFilter.value;
+  filters.friend = els.friendFilter.value;
+}
+
+function getFilteredReviews() {
+  const search = filters.search.toLowerCase();
+  return getReviews()
+    .filter((review) => {
+      const haystack = [
+        review.reviewer,
+        review.notes,
+        review.burger.restaurant,
+        review.burger.burger,
+        review.burger.description,
+        review.burger.neighborhood,
+        review.burger.tags.join(" ")
+      ].join(" ").toLowerCase();
+
+      return (
+        (!search || haystack.includes(search)) &&
+        (filters.neighborhood === "all" || review.burger.neighborhood === filters.neighborhood) &&
+        (filters.friend === "all" || review.reviewer === filters.friend) &&
+        review.rating >= filters.rating
+      );
+    })
+    .sort((a, b) => {
+      if (filters.sort === "rating") return b.rating - a.rating || new Date(b.createdAt) - new Date(a.createdAt);
+      if (filters.sort === "restaurant") return a.burger.restaurant.localeCompare(b.burger.restaurant);
+      if (filters.sort === "available") return (a.burger.available[0] || "").localeCompare(b.burger.available[0] || "");
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+}
+
+function renderStats() {
+  const event = getEvent();
+  const reviews = getReviews();
+  const hiddenCount = accountHiddenIds().size;
+  const visibleCount = Math.max(0, event.burgers.length - hiddenCount);
+  const uniqueSpots = new Set(reviews.map((review) => review.burgerId)).size;
+  const avg = reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
+  const topReview = [...reviews].sort((a, b) => b.rating - a.rating)[0];
+  const topSpot = topReview ? getBurger(topReview.burgerId).restaurant : "No reviews";
+  const topWanted = mostWantedBurgers(1)[0];
+
+  const stats = [
+    ["Reviews", reviews.length],
+    ["Spots Tried", uniqueSpots],
+    ["Visible Burgers", visibleCount],
+    ["Hidden", hiddenCount],
+    ["Avg Rating", avg ? formatRating(avg) : "0.00"],
+    ["Top Right Now", topSpot],
+    ["Most Wanted", topWanted ? topWanted.burger.restaurant : "No hype yet"]
+  ];
+
+  els.statsGrid.innerHTML = stats
+    .map(([label, value]) => `
+      <article class="stat-card">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </article>
+    `)
+    .join("");
+}
+
+function reviewImage(review) {
+  const official = review.burger.restaurantPhoto;
+  const showOfficial = photoViewByReview[review.id] === "official";
+  if (showOfficial && official) {
+    return { src: official, alt: review.burger.photoAlt || `${review.burger.restaurant} official burger photo`, source: "Restaurant photo" };
+  }
+  if (review.photo) {
+    return { src: review.photo, alt: `Burger reviewed by ${review.reviewer}`, source: "Friend photo" };
+  }
+  if (official) {
+    return { src: official, alt: review.burger.photoAlt || `${review.burger.restaurant} official burger photo`, source: "Restaurant photo" };
+  }
+  return null;
+}
+
+function renderFeed() {
+  const reviews = getFilteredReviews();
+  els.resultCount.textContent = `${reviews.length} review${reviews.length === 1 ? "" : "s"}`;
+
+  if (!reviews.length) {
+    els.reviewGrid.innerHTML = $("#emptyTemplate").innerHTML;
+    return;
+  }
+
+  els.reviewGrid.innerHTML = reviews
+    .map((review) => {
+      const image = reviewImage(review);
+      const hasToggle = Boolean(review.photo && review.burger.restaurantPhoto);
+      return `
+        <article class="review-card">
+          <div class="photo-frame ${image ? "" : "placeholder-photo"}">
+            ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}">` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
+            ${hasToggle ? `<button class="photo-toggle" type="button" data-photo-toggle="${escapeAttr(review.id)}" aria-label="Toggle restaurant photo">▣</button>` : ""}
+            ${image ? `<span class="photo-source">${escapeHtml(image.source)}</span>` : ""}
+          </div>
+          <div class="review-body">
+            <div class="review-meta">
+              <button class="reviewer-filter" type="button" data-friend-filter="${escapeAttr(review.reviewer)}">${escapeHtml(review.reviewer)}</button>
+              <time datetime="${escapeAttr(review.createdAt)}">${escapeHtml(timestampFormatter.format(new Date(review.createdAt)))}</time>
+            </div>
+            <div class="review-card-title">
+              <div>
+                <h3>${escapeHtml(review.burger.restaurant)}</h3>
+                <p class="burger-name">${escapeHtml(review.burger.burger)}</p>
+              </div>
+              <div class="quick-links" aria-label="Review links">
+                <a href="${escapeAttr(review.burger.mapsUrl)}" target="_blank" rel="noreferrer" aria-label="Open restaurant location in maps">⌖</a>
+                <a href="${escapeAttr(review.burger.everoutUrl)}" target="_blank" rel="noreferrer" aria-label="Open burger listing on EverOut">↗</a>
+              </div>
+            </div>
+            <div class="rating-row" aria-label="${formatRating(review.rating)} out of 5 stars">
+              ${renderStars(review.rating)}
+              <b>${formatRating(review.rating)}</b>
+            </div>
+            <p>${escapeHtml(review.notes || "No notes.")}</p>
+            <div class="tag-row">
+              <span>${escapeHtml(review.burger.neighborhood)}</span>
+              ${review.burger.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function burgerReviewStats(burgerId) {
+  const reviews = getReviews().filter((review) => review.burgerId === burgerId);
+  const avg = reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
+  return { count: reviews.length, avg };
+}
+
+function mostWantedBurgers(limit = 5) {
+  const hiddenIds = accountHiddenIds();
+  return getEvent().burgers
+    .filter((burger) => !hiddenIds.has(burger.id))
+    .map((burger) => {
+      const wants = burgerWantEntries(burger.id);
+      return {
+        burger,
+        count: wants.length,
+        names: wants.map((want) => want.displayName).filter(Boolean)
+      };
+    })
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || a.burger.restaurant.localeCompare(b.burger.restaurant))
+    .slice(0, limit);
+}
+
+function renderHypeList() {
+  const hype = mostWantedBurgers(5);
+  if (!hype.length) {
+    els.hypeList.innerHTML = `
+      <article class="hype-empty">
+        <strong>Hype List</strong>
+        <span>No wishes yet. Tap a Want button on the Burger Board to start the chase.</span>
+      </article>
+    `;
+    return;
+  }
+
+  els.hypeList.innerHTML = `
+    <div class="hype-heading">
+      <h3>Hype List</h3>
+      <span>Most wished-for burgers</span>
+    </div>
+    <div class="hype-grid">
+      ${hype.map((item, index) => `
+        <article class="hype-card">
+          <span class="hype-rank">#${index + 1}</span>
+          <div>
+            <strong>${escapeHtml(item.burger.restaurant)}</strong>
+            <p>${escapeHtml(item.burger.burger)}</p>
+            <small>${escapeHtml(item.names.join(", "))}</small>
+          </div>
+          <b>${item.count}</b>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderHiddenProfileList() {
+  if (!els.hiddenList || !els.hiddenCount || !events[currentEventId]) return;
+
+  const account = getAccount();
+  if (!account) {
+    els.hiddenCount.textContent = "Log in";
+    els.hiddenList.innerHTML = `<p class="profile-empty">Log in to see your hidden burgers.</p>`;
+    return;
+  }
+
+  const hidden = accountHiddenEntries().sort((a, b) => a.restaurant.localeCompare(b.restaurant));
+  els.hiddenCount.textContent = `${hidden.length} hidden`;
+  if (!hidden.length) {
+    els.hiddenList.innerHTML = `<p class="profile-empty">Nothing hidden yet.</p>`;
+    return;
+  }
+
+  els.hiddenList.innerHTML = hidden
+    .map((entry) => `
+      <article class="hidden-item">
+        <div>
+          <strong>${escapeHtml(entry.restaurant)}</strong>
+          <span>${escapeHtml(entry.burger)}</span>
+        </div>
+        <button class="ghost-button compact-button" type="button" data-unhide-burger="${escapeAttr(entry.burgerId)}">Unhide</button>
+      </article>
+    `)
+    .join("");
+}
+
+function renderBurgerList() {
+  const event = getEvent();
+  const hiddenIds = accountHiddenIds();
+  const visibleBurgers = event.burgers.filter((burger) => !hiddenIds.has(burger.id));
+
+  if (!visibleBurgers.length) {
+    els.burgerList.innerHTML = `
+      <div class="empty-state">
+        <h3>No visible burgers left.</h3>
+        <p>Open your profile from the top bar to unhide burgers.</p>
+      </div>
+    `;
+    return;
+  }
+
+  els.burgerList.innerHTML = visibleBurgers
+    .map((burger) => {
+      const stats = burgerReviewStats(burger.id);
+      const wantCount = burgerWantEntries(burger.id).length;
+      const wanted = accountWantsBurger(burger.id);
+      return `
+        <article class="burger-row">
+          <div>
+            <h3>${escapeHtml(burger.restaurant)}</h3>
+            <p>${escapeHtml(burger.burger)}</p>
+            <p class="burger-description">${escapeHtml(burger.description || "")}</p>
+            <div class="tag-row">
+              <span>${escapeHtml(burger.neighborhood)}</span>
+              <span>${escapeHtml(burger.hours || "Hours TBD")}</span>
+              ${burger.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+            </div>
+          </div>
+          <div class="burger-actions">
+            <button class="want-button ${wanted ? "is-wanted" : ""}" type="button" data-want-burger="${escapeAttr(burger.id)}" aria-pressed="${wanted}" aria-label="${wanted ? "Remove want for" : "Want"} ${escapeAttr(burger.restaurant)}">
+              <span aria-hidden="true">${wanted ? "♥" : "♡"}</span>
+              <b>${wanted ? "Wanted" : "Want"}</b>
+              <small>${wantCount} want${wantCount === 1 ? "" : "s"}</small>
+            </button>
+            <button class="hide-button" type="button" data-hide-burger="${escapeAttr(burger.id)}" aria-label="Hide ${escapeAttr(burger.restaurant)}">
+              <span aria-hidden="true">⊘</span>
+              <b>Hide</b>
+              <small>Skip list</small>
+            </button>
+            <div class="score-pill" aria-label="${formatRating(stats.avg)} average from ${stats.count} reviews">
+              <span>${stats.count ? formatRating(stats.avg) : "-"}</span>
+              <small>${stats.count} review${stats.count === 1 ? "" : "s"}</small>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderMap() {
+  const event = getEvent();
+  els.mapPins.innerHTML = `
+    <span class="river" aria-hidden="true"></span>
+    ${event.burgers.map((burger) => `
+      <a class="pin" style="left:${burger.map.x}%;top:${burger.map.y}%;" href="${escapeAttr(burger.mapsUrl)}" target="_blank" rel="noreferrer" aria-label="${escapeAttr(burger.restaurant)} map link">
+        ${escapeHtml(burger.restaurant.charAt(0))}
+      </a>
+    `).join("")}
+  `;
+  els.mapList.innerHTML = event.burgers
+    .slice(0, 24)
+    .map((burger) => `
+      <article>
+        <strong>${escapeHtml(burger.restaurant)}</strong>
+        <span>${escapeHtml(burger.neighborhood)}</span>
+      </article>
+    `)
+    .join("");
+}
+
+function renderCalendar() {
+  const event = getEvent();
+  els.calendarGrid.innerHTML = event.dates
+    .map((date) => {
+      const available = event.burgers.filter((burger) => burger.available.includes(date));
+      const day = dayFormatter.format(new Date(`${date}T12:00:00`));
+      return `
+        <article class="day-card">
+          <h3>${escapeHtml(day)}</h3>
+          <span>${available.length} burgers</span>
+          <ul>
+            ${available.slice(0, 8).map((burger) => `<li>${escapeHtml(burger.restaurant)}</li>`).join("")}
+          </ul>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderStarInput() {
+  const values = Array.from({ length: 21 }, (_, index) => index * 0.25);
+  els.ratingOutput.value = formatRating(currentRating);
+  els.ratingInput.value = String(currentRating);
+  els.starInput.innerHTML = values
+    .map((value) => `
+      <button type="button" class="${value === currentRating ? "selected" : ""}" data-rating="${value}" aria-label="${formatRating(value)} out of 5">
+        ${formatRating(value)}
+      </button>
+    `)
+    .join("");
+}
+
+function renderAll() {
+  hydrateFilters();
+  renderAuth();
+  renderStats();
+  renderFeed();
+  renderHypeList();
+  renderBurgerList();
+  renderMap();
+  renderCalendar();
+  renderStarInput();
+}
+
+function showView(viewName) {
+  els.tabs.forEach((tab) => {
+    const isActive = tab.dataset.view === viewName;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+  els.views.forEach((view) => view.classList.toggle("is-active", view.id === `${viewName}View`));
+}
+
+function readPhoto(file) {
+  return new Promise((resolve) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+function openReviewComposer() {
+  const account = getAccount();
+  if (!account) {
+    openReviewAfterLogin = true;
+    els.loginDialog.showModal();
+    return;
+  }
+  els.reviewerInput.value = account.displayName;
+  els.dialog.showModal();
+}
+
+function resetFilters() {
+  filters = { search: "", neighborhood: "all", friend: "all", rating: 0, sort: "recent" };
+  els.searchInput.value = "";
+  els.ratingFilter.value = "0";
+  els.sortSelect.value = "recent";
+}
+
+els.searchInput.addEventListener("input", (event) => {
+  filters.search = event.target.value;
+  renderFeed();
+});
+
+els.neighborhoodFilter.addEventListener("change", (event) => {
+  filters.neighborhood = event.target.value;
+  renderFeed();
+});
+
+els.friendFilter.addEventListener("change", (event) => {
+  filters.friend = event.target.value;
+  renderFeed();
+});
+
+els.ratingFilter.addEventListener("change", (event) => {
+  filters.rating = Number(event.target.value);
+  renderFeed();
+});
+
+els.sortSelect.addEventListener("change", (event) => {
+  filters.sort = event.target.value;
+  renderFeed();
+});
+
+els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+els.eventPicker.addEventListener("change", (event) => {
+  currentEventId = event.target.value;
+  resetFilters();
+  renderAll();
+});
+
+els.openComposer.addEventListener("click", openReviewComposer);
+els.closeComposer.addEventListener("click", () => els.dialog.close());
+els.authButton.addEventListener("click", () => {
+  const account = getAccount();
+  els.loginNameInput.value = account?.displayName || "";
+  els.loginEmailInput.value = account?.email || "";
+  els.loginDialog.showModal();
+});
+els.closeLogin.addEventListener("click", () => els.loginDialog.close());
+
+els.loginForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = new FormData(els.loginForm);
+  const email = form.get("email").trim().toLowerCase();
+  setAccount({
+    id: accountIdFromEmail(email),
+    displayName: form.get("displayName").trim(),
+    email
+  });
+  els.loginDialog.close();
+  renderAll();
+  if (openReviewAfterLogin) {
+    openReviewAfterLogin = false;
+    openReviewComposer();
+  } else if (pendingWantBurgerId) {
+    const burgerId = pendingWantBurgerId;
+    pendingWantBurgerId = "";
+    toggleWant(burgerId);
+  } else if (pendingHideBurgerId) {
+    const burgerId = pendingHideBurgerId;
+    pendingHideBurgerId = "";
+    hideBurger(burgerId);
+  }
+});
+
+els.logoutButton.addEventListener("click", () => {
+  setAccount(null);
+  els.loginDialog.close();
+});
+
+els.starInput.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  currentRating = Number(button.dataset.rating);
+  renderStarInput();
+});
+
+els.reviewGrid.addEventListener("click", (event) => {
+  const friendButton = event.target.closest("[data-friend-filter]");
+  const photoButton = event.target.closest("[data-photo-toggle]");
+
+  if (friendButton) {
+    filters.friend = friendButton.dataset.friendFilter;
+    els.friendFilter.value = filters.friend;
+    showView("feed");
+    renderFeed();
+  }
+
+  if (photoButton) {
+    const reviewId = photoButton.dataset.photoToggle;
+    photoViewByReview[reviewId] = photoViewByReview[reviewId] === "official" ? "friend" : "official";
+    renderFeed();
+  }
+});
+
+els.burgerList.addEventListener("click", (event) => {
+  const wantButton = event.target.closest("[data-want-burger]");
+  const hideButton = event.target.closest("[data-hide-burger]");
+  if (wantButton) {
+    toggleWant(wantButton.dataset.wantBurger);
+  }
+  if (hideButton) {
+    hideBurger(hideButton.dataset.hideBurger);
+  }
+});
+
+els.hiddenList.addEventListener("click", (event) => {
+  const unhideButton = event.target.closest("[data-unhide-burger]");
+  if (!unhideButton) return;
+  unhideBurger(unhideButton.dataset.unhideBurger);
+});
+
+els.reviewForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const account = getAccount();
+  if (!account) {
+    els.dialog.close();
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const form = new FormData(els.reviewForm);
+  const photo = await readPhoto(els.photoInput.files[0]);
+  const review = {
+    id: crypto.randomUUID(),
+    burgerId: form.get("burgerId"),
+    reviewer: account.displayName,
+    profileId: account.id,
+    rating: Number(form.get("rating")),
+    notes: form.get("notes").trim(),
+    photo,
+    createdAt: new Date().toISOString()
+  };
+
+  const allReviews = loadLocalReviews();
+  allReviews[currentEventId] = [...(allReviews[currentEventId] || []), review];
+  saveLocalReviews(allReviews);
+  els.reviewForm.reset();
+  currentRating = 5;
+  renderStarInput();
+  els.dialog.close();
+  renderAll();
+});
+
+els.clearLocalData.addEventListener("click", () => {
+  const allReviews = loadLocalReviews();
+  allReviews[currentEventId] = [];
+  saveLocalReviews(allReviews);
+  renderAll();
+});
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+
+loadEvents().then((loadedEvents) => {
+  events = loadedEvents;
+  renderAll();
+});

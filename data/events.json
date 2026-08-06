@@ -1,0 +1,22 @@
+[
+  {
+    "id": "burger-week-2026",
+    "title": "Burger Week 2026",
+    "city": "Portland, OR",
+    "starts_on": "2026-08-10",
+    "ends_on": "2026-08-16",
+    "price_label": "$10",
+    "source_url": "https://everout.com/portland/events/the-portland-mercurys-burger-week-2026/e222750/",
+    "archived_at": ""
+  },
+  {
+    "id": "future-week-template",
+    "title": "Future Week Template",
+    "city": "Portland, OR",
+    "starts_on": "",
+    "ends_on": "",
+    "price_label": "TBD",
+    "source_url": "",
+    "archived_at": ""
+  }
+]

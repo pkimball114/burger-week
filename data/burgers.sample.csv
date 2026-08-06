@@ -1,0 +1,7 @@
+id,restaurant,burger,neighborhood,address,available_start,available_end,tags,latitude,longitude
+von-ebert-glendoveer,Von Ebert Brewing Glendoveer,Event burger TBD,Glendoveer,"Portland, OR",2026-08-10,2026-08-16,"beer;source-backed",,
+sample-se-veggie,Sample Southeast Veggie Spot,Event burger TBD,Southeast,"Portland, OR",2026-08-10,2026-08-16,"plant-based;sample",,
+sample-ne-brewpub,Sample Northeast Brewpub,Event burger TBD,Northeast,"Portland, OR",2026-08-10,2026-08-16,"beer;sample",,
+sample-se-late,Sample Late-Night Burger Bar,Event burger TBD,Southeast,"Portland, OR",2026-08-10,2026-08-16,"late;sample",,
+sample-north-patio,Sample North Portland Patio,Event burger TBD,North Portland,"Portland, OR",2026-08-10,2026-08-16,"patio;sample",,
+sample-downtown,Sample Downtown Counter,Event burger TBD,Downtown,"Portland, OR",2026-08-10,2026-08-16,"fancy-ish;sample",,
