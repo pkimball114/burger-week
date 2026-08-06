@@ -3,6 +3,7 @@ const reviewStoreKey = "burger-week-reviews-v2";
 const accountStoreKey = "burger-week-account-v1";
 const wantStoreKey = "burger-week-wants-v1";
 const hiddenStoreKey = "burger-week-hidden-v1";
+const supabasePhotoBucket = "burger-review-photos";
 const dayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
 const timestampFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
@@ -47,6 +48,7 @@ const els = {
   loginForm: $("#loginForm"),
   loginNameInput: $("#loginNameInput"),
   loginEmailInput: $("#loginEmailInput"),
+  authStatus: $("#authStatus"),
   closeLogin: $("#closeLogin"),
   logoutButton: $("#logoutButton"),
   reviewerInput: $("#reviewerInput"),
@@ -61,6 +63,13 @@ let photoViewByReview = {};
 let openReviewAfterLogin = false;
 let pendingWantBurgerId = "";
 let pendingHideBurgerId = "";
+let supabaseClient = null;
+let supabaseSession = null;
+let supabaseProfile = null;
+let authStatusMessage = "";
+let remoteReviewsByEvent = {};
+let remoteWantsByEvent = {};
+let remoteHiddenByEvent = {};
 let filters = {
   search: "",
   neighborhood: "all",
@@ -310,7 +319,41 @@ function getEvent() {
   return events[currentEventId];
 }
 
+function supabaseConfig() {
+  return window.BURGER_WEEK_CONFIG || {};
+}
+
+function hasUsableSupabaseConfig() {
+  const config = supabaseConfig();
+  return (
+    config.authMode === "supabase" &&
+    /^https:\/\/.+\.supabase\.co\/?$/.test(config.supabaseUrl || "") &&
+    Boolean(config.supabaseAnonKey) &&
+    !/YOUR_|PUBLIC_|ANON_KEY/.test(config.supabaseAnonKey) &&
+    Boolean(window.supabase?.createClient)
+  );
+}
+
+function isSupabaseReady() {
+  return Boolean(supabaseClient && supabaseSession?.user);
+}
+
 function getAccount() {
+  if (isSupabaseReady()) {
+    const user = supabaseSession.user;
+    const displayName =
+      supabaseProfile?.display_name ||
+      user.user_metadata?.display_name ||
+      user.email?.split("@")[0] ||
+      "Burger friend";
+
+    return {
+      id: user.id,
+      displayName,
+      email: user.email || ""
+    };
+  }
+
   try {
     return JSON.parse(localStorage.getItem(accountStoreKey));
   } catch {
@@ -325,6 +368,171 @@ function setAccount(account) {
     localStorage.removeItem(accountStoreKey);
   }
   renderAuth();
+}
+
+function setAuthStatus(message) {
+  authStatusMessage = message;
+  renderAuth();
+}
+
+function defaultProfileName(user) {
+  return user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Burger friend";
+}
+
+async function ensureSupabaseProfile(displayName = "") {
+  if (!supabaseClient || !supabaseSession?.user) return null;
+
+  const user = supabaseSession.user;
+  const profile = {
+    id: user.id,
+    display_name: displayName.trim() || defaultProfileName(user)
+  };
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .upsert(profile, { onConflict: "id" })
+    .select("id, display_name, avatar_url")
+    .single();
+
+  if (error) {
+    setAuthStatus(`Signed in, but profile sync failed: ${error.message}`);
+    supabaseProfile = profile;
+    return profile;
+  }
+
+  supabaseProfile = data;
+  return data;
+}
+
+async function signedPhotoUrl(path) {
+  if (!path || !supabaseClient) return "";
+
+  const { data, error } = await supabaseClient.storage.from(supabasePhotoBucket).createSignedUrl(path, 60 * 60);
+  if (error) return "";
+  return data?.signedUrl || "";
+}
+
+async function mapSupabaseReview(row) {
+  return {
+    id: row.id,
+    burgerId: row.food_item_id,
+    reviewer: row.profiles?.display_name || "Burger friend",
+    profileId: row.profile_id,
+    rating: Number(row.rating),
+    notes: row.notes || "",
+    photo: await signedPhotoUrl(row.photo_path),
+    photoPath: row.photo_path || "",
+    createdAt: row.created_at
+  };
+}
+
+async function loadSupabaseReviews() {
+  const { data, error } = await supabaseClient
+    .from("reviews")
+    .select("id,event_id,food_item_id,profile_id,rating,notes,photo_path,created_at,updated_at,profiles(display_name)")
+    .eq("event_id", currentEventId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  const mapped = await Promise.all((data || []).map(mapSupabaseReview));
+  remoteReviewsByEvent[currentEventId] = mapped;
+}
+
+async function loadSupabaseWants() {
+  const { data, error } = await supabaseClient
+    .from("wants")
+    .select("event_id,food_item_id,profile_id,created_at,profiles(display_name)")
+    .eq("event_id", currentEventId);
+
+  if (error) throw error;
+
+  remoteWantsByEvent[currentEventId] = {};
+  (data || []).forEach((want) => {
+    remoteWantsByEvent[currentEventId][want.food_item_id] ||= {};
+    remoteWantsByEvent[currentEventId][want.food_item_id][want.profile_id] = {
+      displayName: want.profiles?.display_name || "Burger friend",
+      createdAt: want.created_at
+    };
+  });
+}
+
+async function loadSupabaseHidden() {
+  const { data, error } = await supabaseClient
+    .from("hidden_food_items")
+    .select("event_id,food_item_id,created_at")
+    .eq("event_id", currentEventId);
+
+  if (error) throw error;
+
+  remoteHiddenByEvent[currentEventId] = {};
+  (data || []).forEach((entry) => {
+    const burger = getBurger(entry.food_item_id);
+    remoteHiddenByEvent[currentEventId][entry.food_item_id] = {
+      burgerId: entry.food_item_id,
+      restaurant: burger.restaurant,
+      burger: burger.burger,
+      hiddenAt: entry.created_at
+    };
+  });
+}
+
+async function refreshSupabaseData() {
+  if (!isSupabaseReady()) return;
+
+  try {
+    await Promise.all([loadSupabaseReviews(), loadSupabaseWants(), loadSupabaseHidden()]);
+    setAuthStatus("Shared Supabase mode is active.");
+  } catch (error) {
+    setAuthStatus(`Supabase sync failed: ${error.message}`);
+  }
+}
+
+async function initializeSupabase() {
+  if (!hasUsableSupabaseConfig()) {
+    if (supabaseConfig().authMode === "supabase") {
+      setAuthStatus("Supabase config is incomplete or the CDN client did not load. Local fallback is active.");
+    }
+    return;
+  }
+
+  const config = supabaseConfig();
+  supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  });
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    setAuthStatus(`Supabase session check failed: ${error.message}`);
+    return;
+  }
+
+  supabaseSession = data.session;
+  if (supabaseSession) {
+    await ensureSupabaseProfile();
+    await refreshSupabaseData();
+  } else {
+    setAuthStatus("Supabase is configured. Log in with an email magic link.");
+  }
+
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    supabaseSession = session;
+    supabaseProfile = null;
+    if (session) {
+      await ensureSupabaseProfile();
+      await refreshSupabaseData();
+    } else {
+      remoteReviewsByEvent = {};
+      remoteWantsByEvent = {};
+      remoteHiddenByEvent = {};
+      setAuthStatus("Signed out of Supabase.");
+    }
+    renderAll();
+  });
 }
 
 function loadHidden() {
@@ -342,16 +550,18 @@ function saveHidden(hidden) {
 function accountHiddenEntries() {
   const account = getAccount();
   if (!account) return [];
+  if (isSupabaseReady()) return Object.values(remoteHiddenByEvent[currentEventId] || {});
   return Object.values(loadHidden()[currentEventId]?.[account.id] || {});
 }
 
 function accountHiddenIds() {
   const account = getAccount();
   if (!account) return new Set();
+  if (isSupabaseReady()) return new Set(Object.keys(remoteHiddenByEvent[currentEventId] || {}));
   return new Set(Object.keys(loadHidden()[currentEventId]?.[account.id] || {}));
 }
 
-function hideBurger(burgerId) {
+async function hideBurger(burgerId) {
   const account = getAccount();
   if (!account) {
     pendingHideBurgerId = burgerId;
@@ -360,6 +570,26 @@ function hideBurger(burgerId) {
   }
 
   const burger = getBurger(burgerId);
+  if (isSupabaseReady()) {
+    const { error } = await supabaseClient.from("hidden_food_items").insert({
+      event_id: currentEventId,
+      food_item_id: burgerId,
+      profile_id: account.id
+    });
+
+    if (error && error.code !== "23505") {
+      setAuthStatus(`Could not hide burger: ${error.message}`);
+      return;
+    }
+
+    await refreshSupabaseData();
+    renderStats();
+    renderHiddenProfileList();
+    renderBurgerList();
+    renderHypeList();
+    return;
+  }
+
   const hidden = loadHidden();
   hidden[currentEventId] ||= {};
   hidden[currentEventId][account.id] ||= {};
@@ -376,9 +606,30 @@ function hideBurger(burgerId) {
   renderBurgerList();
 }
 
-function unhideBurger(burgerId) {
+async function unhideBurger(burgerId) {
   const account = getAccount();
   if (!account) return;
+
+  if (isSupabaseReady()) {
+    const { error } = await supabaseClient
+      .from("hidden_food_items")
+      .delete()
+      .eq("event_id", currentEventId)
+      .eq("food_item_id", burgerId)
+      .eq("profile_id", account.id);
+
+    if (error) {
+      setAuthStatus(`Could not unhide burger: ${error.message}`);
+      return;
+    }
+
+    await refreshSupabaseData();
+    renderStats();
+    renderHiddenProfileList();
+    renderBurgerList();
+    renderHypeList();
+    return;
+  }
 
   const hidden = loadHidden();
   if (hidden[currentEventId]?.[account.id]?.[burgerId]) {
@@ -408,6 +659,7 @@ function saveWants(wants) {
 }
 
 function eventWants() {
+  if (isSupabaseReady()) return remoteWantsByEvent[currentEventId] || {};
   return loadWants()[currentEventId] || {};
 }
 
@@ -421,11 +673,38 @@ function accountWantsBurger(burgerId) {
   return Boolean(eventWants()[burgerId]?.[account.id]);
 }
 
-function toggleWant(burgerId) {
+async function toggleWant(burgerId) {
   const account = getAccount();
   if (!account) {
     pendingWantBurgerId = burgerId;
     els.loginDialog.showModal();
+    return;
+  }
+
+  if (isSupabaseReady()) {
+    const wanted = accountWantsBurger(burgerId);
+    const { error } = wanted
+      ? await supabaseClient
+          .from("wants")
+          .delete()
+          .eq("event_id", currentEventId)
+          .eq("food_item_id", burgerId)
+          .eq("profile_id", account.id)
+      : await supabaseClient.from("wants").insert({
+          event_id: currentEventId,
+          food_item_id: burgerId,
+          profile_id: account.id
+        });
+
+    if (error && error.code !== "23505") {
+      setAuthStatus(`Could not update want: ${error.message}`);
+      return;
+    }
+
+    await refreshSupabaseData();
+    renderStats();
+    renderHypeList();
+    renderBurgerList();
     return;
   }
 
@@ -458,6 +737,12 @@ function renderAuth() {
   els.authButton.textContent = account ? account.displayName : "Log In";
   els.authButton.classList.toggle("is-logged-in", Boolean(account));
   els.reviewerInput.value = account?.displayName || "";
+  if (els.authStatus) {
+    const fallbackStatus = hasUsableSupabaseConfig()
+      ? "Enter your email and name to receive a Supabase magic link."
+      : "Local fallback is active until config/supabase.js has your Supabase URL and publishable key.";
+    els.authStatus.textContent = authStatusMessage || fallbackStatus;
+  }
   renderHiddenProfileList();
 }
 
@@ -487,8 +772,8 @@ function getBurger(id) {
 }
 
 function getReviews() {
-  const localReviews = loadLocalReviews()[currentEventId] || [];
-  return [...getEvent().reviews, ...localReviews].map((review) => ({
+  const storedReviews = isSupabaseReady() ? remoteReviewsByEvent[currentEventId] || [] : loadLocalReviews()[currentEventId] || [];
+  return [...getEvent().reviews, ...storedReviews].map((review) => ({
     ...review,
     burger: getBurger(review.burgerId)
   }));
@@ -886,6 +1171,25 @@ function readPhoto(file) {
   });
 }
 
+function safeFileName(fileName = "burger-photo") {
+  return fileName.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/^-|-$/g, "") || "burger-photo";
+}
+
+async function uploadSupabaseReviewPhoto(file, reviewId) {
+  if (!file || !isSupabaseReady()) return "";
+
+  const extension = safeFileName(file.name).split(".").pop() || "jpg";
+  const path = `${supabaseSession.user.id}/${currentEventId}/${reviewId}.${extension}`;
+  const { error } = await supabaseClient.storage.from(supabasePhotoBucket).upload(path, file, {
+    cacheControl: "3600",
+    contentType: file.type || "image/jpeg",
+    upsert: false
+  });
+
+  if (error) throw error;
+  return path;
+}
+
 function openReviewComposer() {
   const account = getAccount();
   if (!account) {
@@ -931,9 +1235,10 @@ els.sortSelect.addEventListener("change", (event) => {
 
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 
-els.eventPicker.addEventListener("change", (event) => {
+els.eventPicker.addEventListener("change", async (event) => {
   currentEventId = event.target.value;
   resetFilters();
+  await refreshSupabaseData();
   renderAll();
 });
 
@@ -947,13 +1252,43 @@ els.authButton.addEventListener("click", () => {
 });
 els.closeLogin.addEventListener("click", () => els.loginDialog.close());
 
-els.loginForm.addEventListener("submit", (event) => {
+els.loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(els.loginForm);
   const email = form.get("email").trim().toLowerCase();
+  const displayName = form.get("displayName").trim();
+
+  if (supabaseClient) {
+    if (isSupabaseReady()) {
+      await ensureSupabaseProfile(displayName);
+      await refreshSupabaseData();
+      els.loginDialog.close();
+      renderAll();
+      return;
+    }
+
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const { error } = await supabaseClient.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+        data: { display_name: displayName }
+      }
+    });
+
+    if (error) {
+      setAuthStatus(`Magic link failed: ${error.message}`);
+      return;
+    }
+
+    setAuthStatus(`Magic link sent to ${email}. Open it on this device to finish logging in.`);
+    els.loginDialog.close();
+    return;
+  }
+
   setAccount({
     id: accountIdFromEmail(email),
-    displayName: form.get("displayName").trim(),
+    displayName,
     email
   });
   els.loginDialog.close();
@@ -972,7 +1307,20 @@ els.loginForm.addEventListener("submit", (event) => {
   }
 });
 
-els.logoutButton.addEventListener("click", () => {
+els.logoutButton.addEventListener("click", async () => {
+  if (supabaseClient && supabaseSession) {
+    await supabaseClient.auth.signOut();
+    supabaseSession = null;
+    supabaseProfile = null;
+    remoteReviewsByEvent = {};
+    remoteWantsByEvent = {};
+    remoteHiddenByEvent = {};
+    setAuthStatus("Signed out of Supabase.");
+    els.loginDialog.close();
+    renderAll();
+    return;
+  }
+
   setAccount(null);
   els.loginDialog.close();
 });
@@ -1029,9 +1377,38 @@ els.reviewForm.addEventListener("submit", async (event) => {
   }
 
   const form = new FormData(els.reviewForm);
+  const reviewId = crypto.randomUUID();
+
+  if (isSupabaseReady()) {
+    try {
+      const photoPath = await uploadSupabaseReviewPhoto(els.photoInput.files[0], reviewId);
+      const { error } = await supabaseClient.from("reviews").insert({
+        id: reviewId,
+        event_id: currentEventId,
+        food_item_id: form.get("burgerId"),
+        profile_id: account.id,
+        rating: Number(form.get("rating")),
+        notes: form.get("notes").trim(),
+        photo_path: photoPath || null
+      });
+
+      if (error) throw error;
+
+      els.reviewForm.reset();
+      currentRating = 5;
+      renderStarInput();
+      els.dialog.close();
+      await refreshSupabaseData();
+      renderAll();
+    } catch (error) {
+      setAuthStatus(`Could not post review: ${error.message}`);
+    }
+    return;
+  }
+
   const photo = await readPhoto(els.photoInput.files[0]);
   const review = {
-    id: crypto.randomUUID(),
+    id: reviewId,
     burgerId: form.get("burgerId"),
     reviewer: account.displayName,
     profileId: account.id,
@@ -1062,7 +1439,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-loadEvents().then((loadedEvents) => {
+loadEvents().then(async (loadedEvents) => {
   events = loadedEvents;
+  await initializeSupabase();
   renderAll();
 });

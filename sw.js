@@ -1,10 +1,11 @@
-const cacheName = "burger-week-v8";
+const cacheName = "burger-week-v9";
 const assets = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./manifest.webmanifest",
+  "./config/supabase.js",
   "./assets/icon.svg",
   "./assets/burger-counter-hero.png",
   "./data/events.json",

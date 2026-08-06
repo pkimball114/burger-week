@@ -164,7 +164,7 @@
           <span>Email</span>
           <input id="loginEmailInput" name="email" type="email" required placeholder="you@example.com">
         </label>
-        <p class="dialog-note">This local login keeps reviews tied to your profile on this device. Supabase Auth can replace it when the shared backend is connected.</p>
+        <p class="dialog-note" id="authStatus">Local fallback is active until Supabase is configured.</p>
         <section class="profile-panel" aria-label="Hidden burgers">
           <div class="profile-panel-heading">
             <h3>Hidden Burgers</h3>
@@ -186,6 +186,8 @@
       </div>
     </template>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
+    <script src="config/supabase.js" defer></script>
     <script src="app.js" defer></script>
   </body>
 </html>
