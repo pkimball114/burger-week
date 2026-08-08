@@ -109,7 +109,7 @@ function fallbackEvent() {
       address: "Portland, OR",
       available: dates,
       hours: "Replace with event hours.",
-      tags: ["beer", "source-backed"],
+      tags: ["beer"],
       restaurantPhoto: "data/photos/restaurant-placeholder.svg",
       photoAlt: "Restaurant-posted burger photo placeholder",
       mapsUrl: "https://maps.apple.com/?q=Von%20Ebert%20Brewing%20Glendoveer%20Portland%20OR",
@@ -128,7 +128,7 @@ function fallbackEvent() {
         address: "Portland, OR",
         available: dates,
         hours: "Replace with event hours.",
-        tags: ["placeholder"],
+        tags: [],
         restaurantPhoto: "data/photos/restaurant-placeholder.svg",
         photoAlt: "Restaurant-posted burger photo placeholder",
         mapsUrl: `https://maps.apple.com/?q=${encodeURIComponent(`Burger Week Placeholder ${number} Portland OR`)}`,
@@ -146,35 +146,7 @@ function fallbackEvent() {
       dates,
       sourceUrl: officialEventUrl,
       burgers,
-      reviews: [
-        {
-          id: "seed-1",
-          burgerId: "burger-004",
-          reviewer: "Avery",
-          rating: 4.5,
-          notes: "Messy in the correct way. Good char, excellent sauce ratio, needs extra napkins.",
-          photo: "",
-          createdAt: "2026-08-10T19:42:00-07:00"
-        },
-        {
-          id: "seed-2",
-          burgerId: "burger-008",
-          reviewer: "Morgan",
-          rating: 4,
-          notes: "Big flavor, crispy edges, and an easy weeknight stop.",
-          photo: "",
-          createdAt: "2026-08-11T12:20:00-07:00"
-        },
-        {
-          id: "seed-3",
-          burgerId: "von-ebert-glendoveer",
-          reviewer: "Sam",
-          rating: 5,
-          notes: "Worth crossing town for. Rich, balanced, and gone way too fast.",
-          photo: "",
-          createdAt: "2026-08-11T21:05:00-07:00"
-        }
-      ]
+      reviews: []
     },
     "dumpling-week-template": {
       title: "Dumpling Week Template",
@@ -379,7 +351,7 @@ function padBurgerList(burgers, targetCount, dates, sourceUrl) {
         parsedHours: []
       })),
       hours: "Hours TBD",
-      tags: ["placeholder"],
+      tags: [],
       restaurantPhoto: "data/photos/restaurant-placeholder.svg",
       photoAlt: "Restaurant posted burger photo placeholder",
       mapsUrl: `https://maps.apple.com/?q=${encodeURIComponent(`${restaurant} Portland OR`)}`,
@@ -388,45 +360,6 @@ function padBurgerList(burgers, targetCount, dates, sourceUrl) {
     };
   });
   return [...burgers, ...additions];
-}
-
-function seedReviewsForBurgers(burgers) {
-  const seedProfiles = [
-    {
-      reviewer: "Avery",
-      rating: 4.5,
-      notes: "Messy in the correct way. Good char, excellent sauce ratio, needs extra napkins.",
-      createdAt: "2026-08-10T19:42:00-07:00"
-    },
-    {
-      reviewer: "Morgan",
-      rating: 4,
-      notes: "Big flavor, crispy edges, and an easy weeknight stop.",
-      createdAt: "2026-08-11T12:20:00-07:00"
-    },
-    {
-      reviewer: "Sam",
-      rating: 5,
-      notes: "Worth crossing town for. Rich, balanced, and gone way too fast.",
-      createdAt: "2026-08-11T21:05:00-07:00"
-    }
-  ];
-
-  return seedProfiles
-    .map((review, index) => {
-      const burger = burgers[index];
-      if (!burger) return null;
-      return {
-        id: `seed-${index + 1}`,
-        burgerId: burger.id,
-        reviewer: review.reviewer,
-        rating: review.rating,
-        notes: review.notes,
-        photo: "",
-        createdAt: review.createdAt
-      };
-    })
-    .filter(Boolean);
 }
 
 async function loadEvents() {
@@ -455,7 +388,7 @@ async function loadEvents() {
             available: availability.map((entry) => entry.date),
             availability,
             hours: formatWeeklyHours(availability),
-            tags: row.tags ? row.tags.split(";").filter(Boolean) : ["source-backed"],
+            tags: row.tags ? row.tags.split(";").filter(Boolean) : [],
             restaurantPhoto: row.restaurant_photo || "data/photos/restaurant-placeholder.svg",
             photoAlt: `${row.restaurant || "Restaurant"} burger photo`,
             mapsUrl: row.maps_url || `https://maps.apple.com/?q=${encodeURIComponent(`${row.restaurant || "Burger Week"} ${row.address || "Portland, OR"}`)}`,
@@ -471,7 +404,7 @@ async function loadEvents() {
         dates,
         sourceUrl,
         burgers: padBurgerList(burgers, event.targetCount || burgers.length, dates, sourceUrl),
-        reviews: seedReviewsForBurgers(burgers)
+        reviews: []
       };
     }));
 
@@ -1091,6 +1024,10 @@ function reviewImage(review) {
   return null;
 }
 
+function displayTags(burger) {
+  return (burger.tags || []).filter((tag) => !["source-backed", "placeholder"].includes(tag.toLowerCase()));
+}
+
 function renderFeed() {
   const reviews = getFilteredReviews();
   els.resultCount.textContent = `${reviews.length} review${reviews.length === 1 ? "" : "s"}`;
@@ -1134,7 +1071,7 @@ function renderFeed() {
             <p>${escapeHtml(review.notes || "No notes.")}</p>
             <div class="tag-row">
               <span>${escapeHtml(review.burger.neighborhood)}</span>
-              ${review.burger.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+              ${displayTags(review.burger).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
             </div>
           </div>
         </article>
@@ -1249,16 +1186,37 @@ function renderBurgerList() {
       const stats = burgerReviewStats(burger.id);
       const wantCount = burgerWantEntries(burger.id).length;
       const wanted = accountWantsBurger(burger.id);
+      const visibleTags = displayTags(burger);
+      const placeholderArt = burger.restaurantPhoto?.includes("restaurant-placeholder.svg");
+      const availability = burger.availability?.length
+        ? burger.availability.map((entry) => `<span><b>${escapeHtml(entry.dayLabel)}</b> ${escapeHtml(entry.hoursText)}</span>`).join("")
+        : `<span>${escapeHtml(burger.hours || "Hours TBD")}</span>`;
       return `
         <article class="burger-row">
-          <div>
-            <h3>${escapeHtml(burger.restaurant)}</h3>
-            <p>${escapeHtml(burger.burger)}</p>
+          <div class="burger-photo photo-frame ${placeholderArt ? "placeholder-art" : ""}">
+            <img src="${escapeAttr(burger.restaurantPhoto)}" alt="${escapeAttr(burger.photoAlt || `${burger.restaurant} burger photo`)}">
+          </div>
+          <div class="burger-main">
+            <div class="burger-title-row">
+              <div>
+                <h3>${escapeHtml(burger.restaurant)}</h3>
+                <p>${escapeHtml(burger.burger)}</p>
+              </div>
+              <div class="quick-links" aria-label="Burger links">
+                <a href="${escapeAttr(burger.mapsUrl)}" target="_blank" rel="noreferrer" aria-label="Open restaurant location in maps">⌖</a>
+                <a href="${escapeAttr(burger.everoutUrl)}" target="_blank" rel="noreferrer" aria-label="Open burger listing on EverOut">↗</a>
+              </div>
+            </div>
             <p class="burger-description">${escapeHtml(burger.description || "")}</p>
+            <section class="availability-block" aria-label="Available times">
+              <h4>Available</h4>
+              <div class="availability-list">
+                ${availability}
+              </div>
+            </section>
             <div class="tag-row">
               <span>${escapeHtml(burger.neighborhood)}</span>
-              <span>${escapeHtml(burger.hours || "Hours TBD")}</span>
-              ${burger.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+              ${visibleTags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
             </div>
           </div>
           <div class="burger-actions">
