@@ -678,11 +678,21 @@ legend {
   aspect-ratio: 4 / 3;
   border: var(--line);
   border-radius: 8px;
+  padding: 0;
+  color: inherit;
+  box-shadow: none;
+  cursor: zoom-in;
 }
 
 .burger-photo img {
   display: block;
   object-position: center center;
+}
+
+.burger-photo:hover,
+.burger-photo:focus-visible {
+  outline: 4px solid var(--bun);
+  outline-offset: 4px;
 }
 
 .burger-main {
@@ -917,6 +927,61 @@ legend {
 
 .review-dialog::backdrop {
   background: rgba(37, 25, 20, 0.55);
+}
+
+.image-dialog {
+  width: min(980px, calc(100% - 28px));
+  max-height: calc(100vh - 28px);
+  border: var(--line);
+  border-radius: 8px;
+  background: var(--ink);
+  box-shadow: 8px 8px 0 rgba(37, 25, 20, 0.48);
+  color: var(--plate);
+  padding: 0;
+  overflow: visible;
+}
+
+.image-dialog::backdrop {
+  background: rgba(37, 25, 20, 0.74);
+}
+
+.image-dialog figure {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+}
+
+.image-dialog img {
+  display: block;
+  width: 100%;
+  max-height: min(78vh, 760px);
+  object-fit: contain;
+  background: #110c0a;
+  border-radius: 4px;
+}
+
+.image-dialog figcaption {
+  color: var(--plate);
+  font-weight: 900;
+  text-align: center;
+}
+
+.image-dialog-close {
+  position: absolute;
+  top: -18px;
+  right: -18px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: var(--line);
+  border-radius: 50%;
+  background: var(--bun);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 950;
+  z-index: 2;
 }
 
 .review-dialog form {

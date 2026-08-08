@@ -73,7 +73,11 @@ const els = {
   resetPasswordButton: $("#resetPasswordButton"),
   reviewerInput: $("#reviewerInput"),
   hiddenList: $("#hiddenList"),
-  hiddenCount: $("#hiddenCount")
+  hiddenCount: $("#hiddenCount"),
+  imageDialog: $("#imageDialog"),
+  imageDialogPhoto: $("#imageDialogPhoto"),
+  imageDialogCaption: $("#imageDialogCaption"),
+  closeImageDialog: $("#closeImageDialog")
 };
 
 let events = {};
@@ -1220,9 +1224,9 @@ function renderBurgerList() {
         : `<span>${escapeHtml(burger.hours || "Hours TBD")}</span>`;
       return `
         <article class="burger-row" id="burger-row-${escapeAttr(burger.id)}" data-burger-row="${escapeAttr(burger.id)}" tabindex="-1">
-          <div class="burger-photo photo-frame ${placeholderArt ? "placeholder-art" : ""}">
+          <button class="burger-photo photo-frame ${placeholderArt ? "placeholder-art" : ""}" type="button" data-preview-photo="${escapeAttr(burger.restaurantPhoto)}" data-preview-alt="${escapeAttr(burger.photoAlt || `${burger.restaurant} burger photo`)}" data-preview-caption="${escapeAttr(`${burger.restaurant} - ${burger.burger}`)}" aria-label="Open photo preview for ${escapeAttr(burger.restaurant)}">
             <img src="${escapeAttr(burger.restaurantPhoto)}" alt="${escapeAttr(burger.photoAlt || `${burger.restaurant} burger photo`)}">
-          </div>
+          </button>
           <div class="burger-main">
             <div class="burger-title-row">
               <div>
@@ -1356,6 +1360,22 @@ function jumpToBurger(burgerId) {
     row.scrollIntoView({ behavior: "smooth", block: "start" });
     row.focus({ preventScroll: true });
   });
+}
+
+function openImageDialog({ src, alt, caption }) {
+  if (!src || !els.imageDialog || !els.imageDialogPhoto || !els.imageDialogCaption) return;
+  els.imageDialogPhoto.src = src;
+  els.imageDialogPhoto.alt = alt || caption || "Burger photo";
+  els.imageDialogCaption.textContent = caption || "";
+  els.imageDialog.showModal();
+}
+
+function closeImageDialog() {
+  if (!els.imageDialog?.open) return;
+  els.imageDialog.close();
+  els.imageDialogPhoto.removeAttribute("src");
+  els.imageDialogPhoto.alt = "";
+  els.imageDialogCaption.textContent = "";
 }
 
 function readPhoto(file) {
@@ -1639,6 +1659,15 @@ els.reviewGrid.addEventListener("click", (event) => {
 els.burgerList.addEventListener("click", (event) => {
   const wantButton = event.target.closest("[data-want-burger]");
   const hideButton = event.target.closest("[data-hide-burger]");
+  const previewButton = event.target.closest("[data-preview-photo]");
+  if (previewButton) {
+    openImageDialog({
+      src: previewButton.dataset.previewPhoto,
+      alt: previewButton.dataset.previewAlt,
+      caption: previewButton.dataset.previewCaption
+    });
+    return;
+  }
   if (wantButton) {
     toggleWant(wantButton.dataset.wantBurger);
   }
@@ -1664,6 +1693,13 @@ els.hiddenList.addEventListener("click", (event) => {
   const unhideButton = event.target.closest("[data-unhide-burger]");
   if (!unhideButton) return;
   unhideBurger(unhideButton.dataset.unhideBurger);
+});
+
+els.closeImageDialog.addEventListener("click", closeImageDialog);
+els.imageDialog.addEventListener("click", (event) => {
+  if (event.target === els.imageDialog || event.target === els.imageDialogPhoto) {
+    closeImageDialog();
+  }
 });
 
 els.reviewForm.addEventListener("submit", async (event) => {
