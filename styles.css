@@ -226,15 +226,12 @@ main {
 
 .controls-band {
   position: relative;
+  margin-top: 42px;
   padding: 14px;
   background: var(--pickle);
   border: var(--line);
   border-radius: 8px;
   box-shadow: 6px 6px 0 var(--ink);
-}
-
-.controls-content {
-  padding-right: 54px;
 }
 
 .controls-toggle,
@@ -253,14 +250,15 @@ main {
 
 .controls-toggle {
   position: absolute;
-  top: 14px;
+  bottom: calc(100% + 3px);
   right: 14px;
   z-index: 2;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .controls-band.is-collapsed .tabs {
   margin-top: 0;
-  padding-right: 54px;
 }
 
 .stats-grid {

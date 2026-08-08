@@ -318,7 +318,7 @@ function availabilityFromDayHours(row, eventDates) {
 }
 
 function formatWeeklyHours(availability) {
-  if (!availability.length) return "Not listed for event days";
+  if (!availability.length) return "TBD";
   return availability.map((entry) => `${entry.dayLabel} ${entry.hoursText}`).join("; ");
 }
 
@@ -1143,7 +1143,7 @@ function renderHypeList() {
     els.hypeList.innerHTML = `
       ${heading}
       <article class="hype-empty">
-        <span>No wishes yet. Tap a Want button on the Burger Board to start the chase.</span>
+        <span>No hype yet. Tap a Want button on the Burger Board to start a list.</span>
       </article>
     `;
     return;
