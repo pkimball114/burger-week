@@ -33,6 +33,9 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 const els = {
   eventPicker: $("#eventPicker"),
+  controlsBand: $("#controlsBand"),
+  controlsToggle: $("#controlsToggle"),
+  controlsContent: $("#controlsContent"),
   statsGrid: $("#statsGrid"),
   searchInput: $("#searchInput"),
   neighborhoodFilter: $("#neighborhoodFilter"),
@@ -80,6 +83,8 @@ let photoViewByReview = {};
 let openReviewAfterLogin = false;
 let pendingWantBurgerId = "";
 let pendingHideBurgerId = "";
+let controlsCollapsed = false;
+let hypeCollapsed = false;
 let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
@@ -735,6 +740,7 @@ async function hideBurger(burgerId) {
   renderStats();
   renderHiddenProfileList();
   renderBurgerList();
+  renderHypeList();
 }
 
 async function unhideBurger(burgerId) {
@@ -775,6 +781,7 @@ async function unhideBurger(burgerId) {
   renderStats();
   renderHiddenProfileList();
   renderBurgerList();
+  renderHypeList();
 }
 
 function loadWants() {
@@ -979,10 +986,7 @@ function getFilteredReviews() {
 }
 
 function renderStats() {
-  const event = getEvent();
   const reviews = getReviews();
-  const hiddenCount = accountHiddenIds().size;
-  const visibleCount = Math.max(0, event.burgers.length - hiddenCount);
   const uniqueSpots = new Set(reviews.map((review) => review.burgerId)).size;
   const avg = reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
   const topReview = [...reviews].sort((a, b) => b.rating - a.rating)[0];
@@ -992,8 +996,6 @@ function renderStats() {
   const stats = [
     ["Reviews", reviews.length],
     ["Spots Tried", uniqueSpots],
-    ["Visible Burgers", visibleCount],
-    ["Hidden", hiddenCount],
     ["Avg Rating", avg ? formatRating(avg) : "0.00"],
     ["Top Right Now", topSpot],
     ["Most Wanted", topWanted ? topWanted.burger.restaurant : "No hype yet"]
@@ -1007,6 +1009,15 @@ function renderStats() {
       </article>
     `)
     .join("");
+}
+
+function renderControlsPanel() {
+  if (!els.controlsBand || !els.controlsToggle || !els.controlsContent) return;
+  els.controlsBand.classList.toggle("is-collapsed", controlsCollapsed);
+  els.controlsContent.hidden = controlsCollapsed;
+  els.controlsToggle.setAttribute("aria-expanded", String(!controlsCollapsed));
+  els.controlsToggle.setAttribute("aria-label", controlsCollapsed ? "Expand stats and filters" : "Collapse stats and filters");
+  els.controlsToggle.querySelector("span").textContent = controlsCollapsed ? "+" : "-";
 }
 
 function reviewImage(review) {
@@ -1105,10 +1116,29 @@ function mostWantedBurgers(limit = 5) {
 
 function renderHypeList() {
   const hype = mostWantedBurgers(5);
+  els.hypeList.classList.toggle("is-collapsed", hypeCollapsed);
+
+  const heading = `
+    <div class="hype-heading">
+      <div>
+        <h3>Hype List</h3>
+        <span>${hype.length ? "Most wished-for burgers" : "No wishes yet"}</span>
+      </div>
+      <button class="hype-toggle" type="button" data-toggle-hype aria-expanded="${String(!hypeCollapsed)}" aria-label="${hypeCollapsed ? "Expand Hype List" : "Collapse Hype List"}">
+        <span aria-hidden="true">${hypeCollapsed ? "+" : "-"}</span>
+      </button>
+    </div>
+  `;
+
+  if (hypeCollapsed) {
+    els.hypeList.innerHTML = heading;
+    return;
+  }
+
   if (!hype.length) {
     els.hypeList.innerHTML = `
+      ${heading}
       <article class="hype-empty">
-        <strong>Hype List</strong>
         <span>No wishes yet. Tap a Want button on the Burger Board to start the chase.</span>
       </article>
     `;
@@ -1116,13 +1146,10 @@ function renderHypeList() {
   }
 
   els.hypeList.innerHTML = `
-    <div class="hype-heading">
-      <h3>Hype List</h3>
-      <span>Most wished-for burgers</span>
-    </div>
+    ${heading}
     <div class="hype-grid">
       ${hype.map((item, index) => `
-        <article class="hype-card">
+        <button class="hype-card" type="button" data-jump-burger="${escapeAttr(item.burger.id)}">
           <span class="hype-rank">#${index + 1}</span>
           <div>
             <strong>${escapeHtml(item.burger.restaurant)}</strong>
@@ -1130,7 +1157,7 @@ function renderHypeList() {
             <small>${escapeHtml(item.names.join(", "))}</small>
           </div>
           <b>${item.count}</b>
-        </article>
+        </button>
       `).join("")}
     </div>
   `;
@@ -1192,7 +1219,7 @@ function renderBurgerList() {
         ? burger.availability.map((entry) => `<span><b>${escapeHtml(entry.dayLabel)}</b> ${escapeHtml(entry.hoursText)}</span>`).join("")
         : `<span>${escapeHtml(burger.hours || "Hours TBD")}</span>`;
       return `
-        <article class="burger-row">
+        <article class="burger-row" id="burger-row-${escapeAttr(burger.id)}" data-burger-row="${escapeAttr(burger.id)}" tabindex="-1">
           <div class="burger-photo photo-frame ${placeholderArt ? "placeholder-art" : ""}">
             <img src="${escapeAttr(burger.restaurantPhoto)}" alt="${escapeAttr(burger.photoAlt || `${burger.restaurant} burger photo`)}">
           </div>
@@ -1302,6 +1329,7 @@ function renderStarInput() {
 function renderAll() {
   hydrateFilters();
   renderAuth();
+  renderControlsPanel();
   renderStats();
   renderFeed();
   renderHypeList();
@@ -1318,6 +1346,16 @@ function showView(viewName) {
     tab.setAttribute("aria-selected", String(isActive));
   });
   els.views.forEach((view) => view.classList.toggle("is-active", view.id === `${viewName}View`));
+}
+
+function jumpToBurger(burgerId) {
+  showView("burgers");
+  requestAnimationFrame(() => {
+    const row = document.getElementById(`burger-row-${burgerId}`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "start" });
+    row.focus({ preventScroll: true });
+  });
 }
 
 function readPhoto(file) {
@@ -1396,6 +1434,11 @@ els.sortSelect.addEventListener("change", (event) => {
 });
 
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+els.controlsToggle.addEventListener("click", () => {
+  controlsCollapsed = !controlsCollapsed;
+  renderControlsPanel();
+});
 
 els.eventPicker.addEventListener("change", async (event) => {
   currentEventId = event.target.value;
@@ -1601,6 +1644,19 @@ els.burgerList.addEventListener("click", (event) => {
   }
   if (hideButton) {
     hideBurger(hideButton.dataset.hideBurger);
+  }
+});
+
+els.hypeList.addEventListener("click", (event) => {
+  const toggleButton = event.target.closest("[data-toggle-hype]");
+  const hypeCard = event.target.closest("[data-jump-burger]");
+  if (toggleButton) {
+    hypeCollapsed = !hypeCollapsed;
+    renderHypeList();
+    return;
+  }
+  if (hypeCard) {
+    jumpToBurger(hypeCard.dataset.jumpBurger);
   }
 });
 

@@ -225,11 +225,42 @@ main {
 }
 
 .controls-band {
+  position: relative;
   padding: 14px;
   background: var(--pickle);
   border: var(--line);
   border-radius: 8px;
   box-shadow: 6px 6px 0 var(--ink);
+}
+
+.controls-content {
+  padding-right: 54px;
+}
+
+.controls-toggle,
+.hype-toggle {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: var(--line);
+  border-radius: 8px;
+  background: var(--bun);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 950;
+}
+
+.controls-toggle {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
+
+.controls-band.is-collapsed .tabs {
+  margin-top: 0;
+  padding-right: 54px;
 }
 
 .stats-grid {
@@ -539,7 +570,7 @@ legend {
 
 .hype-heading {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -547,6 +578,11 @@ legend {
 .hype-heading h3 {
   margin: 0;
   font-size: 1.3rem;
+}
+
+.hype-heading span {
+  display: block;
+  margin-top: 3px;
 }
 
 .hype-heading span,
@@ -570,8 +606,20 @@ legend {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  width: 100%;
   gap: 10px;
   min-height: 104px;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.hype-card:hover,
+.hype-card:focus-visible,
+.burger-row:focus {
+  outline: 4px solid var(--bun);
+  outline-offset: 4px;
 }
 
 .hype-card strong,
@@ -626,9 +674,15 @@ legend {
 }
 
 .burger-photo {
+  align-self: center;
   aspect-ratio: 4 / 3;
   border: var(--line);
   border-radius: 8px;
+}
+
+.burger-photo img {
+  display: block;
+  object-position: center center;
 }
 
 .burger-main {

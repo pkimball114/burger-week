@@ -36,39 +36,44 @@
     </header>
 
     <main>
-      <section class="controls-band" aria-label="Review controls">
-        <div class="stats-grid" id="statsGrid"></div>
-        <div class="toolbar">
-          <label class="search">
-            <span>Search</span>
-            <input id="searchInput" type="search" placeholder="Burger, spot, friend, notes">
-          </label>
-          <label>
-            <span>Area</span>
-            <select id="neighborhoodFilter"></select>
-          </label>
-          <label>
-            <span>Friend</span>
-            <select id="friendFilter"></select>
-          </label>
-          <label>
-            <span>Min rating</span>
-            <select id="ratingFilter">
-              <option value="0">Any</option>
-              <option value="5">5 stars</option>
-              <option value="4">4+ stars</option>
-              <option value="3">3+ stars</option>
-            </select>
-          </label>
-          <label>
-            <span>Sort</span>
-            <select id="sortSelect">
-              <option value="recent">Newest</option>
-              <option value="rating">Highest rated</option>
-              <option value="restaurant">Restaurant A-Z</option>
-              <option value="available">Available soonest</option>
-            </select>
-          </label>
+      <section class="controls-band" id="controlsBand" aria-label="Review controls">
+        <button class="controls-toggle" id="controlsToggle" type="button" aria-expanded="true" aria-controls="controlsContent" aria-label="Collapse stats and filters">
+          <span aria-hidden="true">-</span>
+        </button>
+        <div class="controls-content" id="controlsContent">
+          <div class="stats-grid" id="statsGrid"></div>
+          <div class="toolbar">
+            <label class="search">
+              <span>Search</span>
+              <input id="searchInput" type="search" placeholder="Burger, spot, friend, notes">
+            </label>
+            <label>
+              <span>Area</span>
+              <select id="neighborhoodFilter"></select>
+            </label>
+            <label>
+              <span>Friend</span>
+              <select id="friendFilter"></select>
+            </label>
+            <label>
+              <span>Min rating</span>
+              <select id="ratingFilter">
+                <option value="0">Any</option>
+                <option value="5">5 stars</option>
+                <option value="4">4+ stars</option>
+                <option value="3">3+ stars</option>
+              </select>
+            </label>
+            <label>
+              <span>Sort</span>
+              <select id="sortSelect">
+                <option value="recent">Newest</option>
+                <option value="rating">Highest rated</option>
+                <option value="restaurant">Restaurant A-Z</option>
+                <option value="available">Available soonest</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div class="tabs" role="tablist" aria-label="Views">
           <button class="tab is-active" type="button" data-view="feed" role="tab" aria-selected="true">Feed</button>
