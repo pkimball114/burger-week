@@ -395,6 +395,13 @@ legend {
   object-fit: cover;
 }
 
+.photo-frame.placeholder-art img {
+  width: min(78%, 250px);
+  height: min(78%, 250px);
+  object-fit: contain;
+  object-position: center;
+}
+
 .placeholder-photo span {
   display: grid;
   place-items: center;
@@ -782,6 +789,16 @@ legend {
   margin: 0;
   padding-left: 18px;
   font-weight: 700;
+}
+
+.day-card li {
+  display: grid;
+  gap: 2px;
+}
+
+.day-card small {
+  color: #6a5448;
+  font-weight: 800;
 }
 
 .empty-state {

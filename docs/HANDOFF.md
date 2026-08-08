@@ -45,7 +45,7 @@ Implemented UX:
 - The login/profile modal includes a Hidden Burgers list with Unhide buttons.
 - Filters: search, area, friend, minimum rating, and sort.
 - Views: Friend Feed, Burger Board, Map Preview, Week Calendar.
-- Burger Board accommodates 124 burgers. If the editable CSV has fewer rows, `app.js` pads generated placeholders to 124.
+- Burger Board accommodates 124 burgers. If the editable event CSV has fewer rows, `app.js` pads generated placeholders to 124.
 
 Important limitation:
 
@@ -53,20 +53,13 @@ Important limitation:
 
 ## Data Files
 
-The app currently reads these files when served over HTTP:
+The app currently reads one listing file when served over HTTP:
 
-- `data/events.json`
-- `data/burgers.csv`
+- `data/burger-week-2026.csv`
 
-Additional manual placeholder files exist for fuller data entry and future import work:
+The event metadata for Burger Week 2026 lives in `eventDefinitions` in `app.js` so the app remains static and only needs one CSV data file for the event listing rows.
 
-- `data/locations.csv`
-- `data/hours.csv`
-- `data/listed-burger-details.csv`
-- `data/photos.csv`
-- `data/photos/`
-
-The most important file to edit first is `data/burgers.csv`. Each row can include:
+The most important file to edit first is `data/burger-week-2026.csv`. Each row can include:
 
 - `id`
 - `event_id`
@@ -77,16 +70,21 @@ The most important file to edit first is `data/burgers.csv`. Each row can includ
 - `address`
 - `latitude`
 - `longitude`
-- `available_start`
-- `available_end`
-- `hours`
+- `hours_monday`
+- `hours_tuesday`
+- `hours_wednesday`
+- `hours_thursday`
+- `hours_friday`
+- `hours_saturday`
+- `hours_sunday`
 - `tags`
 - `restaurant_photo`
-- `photo_alt`
 - `maps_url`
 - `everout_url`
 
-Restaurant photos should be dropped into `data/photos/` and referenced from `restaurant_photo`.
+Hours should be entered exactly as listed on the source page. A blank `hours_<day>` cell means the burger is not available on that event day. `app.js` preserves the raw hours text and parses simple ranges into minute spans for future calendar planning.
+
+`restaurant_photo` can be a direct source image URL. The local `data/photos/restaurant-placeholder.svg` remains the fallback image.
 
 ## Backend Plan
 
@@ -123,7 +121,7 @@ Validation commands:
 ```bash
 node --check app.js
 python3 -m json.tool manifest.webmanifest
-python3 -m json.tool data/events.json
+python3 -m json.tool manifest.webmanifest
 rg -n "Burger Week Table|burger-week-table|BWT|Burger Table"
 ```
 
@@ -148,7 +146,7 @@ Recent browser verification confirmed:
 - The current local login is only a scaffold. It stores a display name/email locally and is not secure authentication.
 - Want counts are currently local-only, so they are useful for prototype behavior but not a real group-wide hype signal until Supabase is connected.
 - Hidden burgers are currently local-only and should become private per-user backend data when Supabase is connected.
-- `data/burgers.csv` currently has only a small number of manually written rows; generated placeholders fill out the 124-burger interface.
+- `data/burger-week-2026.csv` currently has only a small number of manually written rows; generated placeholders fill out the 124-burger interface.
 - EverOut could not be reliably fetched by automation in the prior work session, so do not assume the local data is complete or official.
 - The Map view is still schematic. Real map work is Phase 2.
 
@@ -157,7 +155,7 @@ Recent browser verification confirmed:
 Highest value next steps:
 
 1. Replace placeholder Burger Week data with the real 124 restaurants and burgers from EverOut/manual entry.
-2. Normalize the data loader so `locations.csv`, `hours.csv`, `listed-burger-details.csv`, and `photos.csv` are merged into the app instead of being documentation-only placeholders.
+2. Continue replacing generated placeholders with real rows in `data/burger-week-2026.csv`.
 3. Connect Supabase Auth and shared reviews/photos.
 4. Improve the rating control UX. Twenty-one buttons works, but a slider plus numeric stepper may feel better on mobile.
 5. Add edit/delete review actions for the logged-in user's reviews.
@@ -167,7 +165,7 @@ Highest value next steps:
 
 Use this:
 
-> Continue development of the Burger Week app in `/Users/parkerkimball/Documents/Burger Week`. First read `docs/HANDOFF.md`, `README.md`, `app.js`, `index.html`, and `styles.css`. Do not assume the current data is official; `data/burgers.csv` is placeholder data that pads to 124 burgers. Keep the app static/GitHub-Pages-compatible unless I explicitly ask for a backend. Preserve the current Bob's-Burgers-inspired visual direction without using copyrighted characters/logos. After inspecting the code, propose the smallest safe implementation plan for my requested change, then implement it and verify with `node --check app.js`, JSON validation, and browser checks on a fresh localhost port to avoid service-worker cache.
+> Continue development of the Burger Week app in `/Users/parkerkimball/Documents/Burger Week`. First read `docs/HANDOFF.md`, `README.md`, `app.js`, `index.html`, and `styles.css`. Do not assume the current data is official; `data/burger-week-2026.csv` is incomplete event data that pads to 124 burgers. Keep the app static/GitHub-Pages-compatible unless I explicitly ask for a backend. Preserve the current Bob's-Burgers-inspired visual direction without using copyrighted characters/logos. After inspecting the code, propose the smallest safe implementation plan for my requested change, then implement it and verify with `node --check app.js`, JSON validation, and browser checks on a fresh localhost port to avoid service-worker cache.
 
 If the next task is Supabase:
 
@@ -175,4 +173,4 @@ If the next task is Supabase:
 
 If the next task is data entry:
 
-> I want to replace placeholders with real Burger Week restaurant data. Read `docs/HANDOFF.md` and inspect `data/*.csv`. Help me update the data model/import path so manually entered locations, hours, listed burger details, EverOut links, and restaurant photos are merged into the app cleanly.
+> I want to replace placeholders with real Burger Week restaurant data. Read `docs/HANDOFF.md` and inspect `data/burger-week-2026.csv`. Help me update the data model/import path so manually entered locations, day-specific hours, EverOut links, and restaurant photos stay in the event CSV cleanly.

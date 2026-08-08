@@ -1,10 +1,24 @@
 const officialEventUrl = "https://everout.com/portland/events/the-portland-mercurys-burger-week-2026/e222750/";
+const eventDefinitions = [
+  {
+    id: "burger-week-2026",
+    title: "Burger Week 2026",
+    city: "Portland, OR",
+    startsOn: "2026-08-10",
+    endsOn: "2026-08-16",
+    price: "$10",
+    sourceUrl: officialEventUrl,
+    targetCount: 124,
+    dataFile: "data/burger-week-2026.csv"
+  }
+];
 const reviewStoreKey = "burger-week-reviews-v2";
 const accountStoreKey = "burger-week-account-v1";
 const wantStoreKey = "burger-week-wants-v1";
 const hiddenStoreKey = "burger-week-hidden-v1";
 const supabasePhotoBucket = "burger-review-photos";
 const dayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
+const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short" });
 const timestampFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
@@ -12,6 +26,7 @@ const timestampFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
   minute: "2-digit"
 });
+const weekdayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -219,9 +234,112 @@ function parseCsv(text) {
   return dataRows.map((values) => Object.fromEntries(headers.map((header, index) => [header.trim(), (values[index] || "").trim()])));
 }
 
-function datesBetween(start, end, eventDates) {
-  if (!start || !end) return eventDates;
-  return eventDates.filter((date) => date >= start && date <= end);
+function dateRange(start, end) {
+  if (!start || !end) return [];
+  const dates = [];
+  const cursor = new Date(`${start}T12:00:00`);
+  const last = new Date(`${end}T12:00:00`);
+
+  while (cursor <= last) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dates;
+}
+
+function weekdayKeyForDate(date) {
+  return weekdayKeys[new Date(`${date}T12:00:00`).getDay()];
+}
+
+function parseClockTime(value, impliedPeriod = "") {
+  const text = value.trim().toLowerCase().replaceAll(".", "");
+  if (text === "noon") return 12 * 60;
+  if (text === "midnight") return 0;
+
+  const match = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+  if (!match) return null;
+
+  const period = match[3] || impliedPeriod;
+  if (!period) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  if (hour > 12 || minute > 59) return null;
+
+  if (period === "am") {
+    hour = hour === 12 ? 0 : hour;
+  } else {
+    hour = hour === 12 ? 12 : hour + 12;
+  }
+
+  return hour * 60 + minute;
+}
+
+function parseHoursSegment(segment) {
+  const text = segment.trim();
+  const match = text.match(/^(.+?)\s*(?:-|\u2013|\u2014|\bto\b)\s*(.+)$/i);
+  if (!match) return null;
+
+  const [, startText, endText] = match;
+  const startPeriod = startText.match(/\b(am|pm)\b/i)?.[1]?.toLowerCase() || "";
+  const endPeriod = endText.match(/\b(am|pm)\b/i)?.[1]?.toLowerCase() || "";
+  const impliedStartPeriod = startPeriod || endPeriod;
+  const startHour = Number(startText.match(/\d{1,2}/)?.[0]);
+  let startMinutes = parseClockTime(startText, impliedStartPeriod);
+  let endMinutes = parseClockTime(endText, endPeriod || startPeriod);
+
+  if (startMinutes === null || endMinutes === null) return null;
+
+  if (endMinutes <= startMinutes) {
+    if (!startPeriod && endPeriod === "pm" && Number.isFinite(startHour) && startHour < 12 && startMinutes >= 12 * 60) {
+      startMinutes -= 12 * 60;
+    } else {
+      endMinutes += 24 * 60;
+    }
+  }
+
+  return {
+    raw: text,
+    startMinutes,
+    endMinutes,
+    overnight: endMinutes >= 24 * 60
+  };
+}
+
+function parseHoursText(hoursText) {
+  if (!hoursText) return [];
+  return hoursText
+    .split(/\s*(?:;|,|&|\band\b)\s*/i)
+    .map(parseHoursSegment)
+    .filter(Boolean);
+}
+
+function availabilityFromDayHours(row, eventDates) {
+  return eventDates
+    .map((date) => {
+      const dayKey = weekdayKeyForDate(date);
+      const hoursText = row[`hours_${dayKey}`] || "";
+      if (!hoursText) return null;
+
+      return {
+        date,
+        dayKey,
+        dayLabel: weekdayFormatter.format(new Date(`${date}T12:00:00`)),
+        hoursText,
+        parsedHours: parseHoursText(hoursText)
+      };
+    })
+    .filter(Boolean);
+}
+
+function formatWeeklyHours(availability) {
+  if (!availability.length) return "Not listed for event days";
+  return availability.map((entry) => `${entry.dayLabel} ${entry.hoursText}`).join("; ");
+}
+
+function hoursForDate(burger, date) {
+  return burger.availability?.find((entry) => entry.date === date)?.hoursText || "";
 }
 
 function coordinateToMapPoint(latitude, longitude, fallbackIndex) {
@@ -246,10 +364,17 @@ function padBurgerList(burgers, targetCount, dates, sourceUrl) {
       id: `burger-${padded}`,
       restaurant,
       burger: "Burger details TBD",
-      description: "Replace this generated placeholder by adding a row to data/burgers.csv.",
+      description: "Replace this generated placeholder by adding a row to the event CSV.",
       neighborhood: neighborhoods[number % neighborhoods.length],
       address: "Portland OR",
       available: dates,
+      availability: dates.map((date) => ({
+        date,
+        dayKey: weekdayKeyForDate(date),
+        dayLabel: weekdayFormatter.format(new Date(`${date}T12:00:00`)),
+        hoursText: "Hours TBD",
+        parsedHours: []
+      })),
       hours: "Hours TBD",
       tags: ["placeholder"],
       restaurantPhoto: "data/photos/restaurant-placeholder.svg",
@@ -262,52 +387,90 @@ function padBurgerList(burgers, targetCount, dates, sourceUrl) {
   return [...burgers, ...additions];
 }
 
+function seedReviewsForBurgers(burgers) {
+  const seedProfiles = [
+    {
+      reviewer: "Avery",
+      rating: 4.5,
+      notes: "Messy in the correct way. Good char, excellent sauce ratio, needs extra napkins.",
+      createdAt: "2026-08-10T19:42:00-07:00"
+    },
+    {
+      reviewer: "Morgan",
+      rating: 4,
+      notes: "Big flavor, crispy edges, and an easy weeknight stop.",
+      createdAt: "2026-08-11T12:20:00-07:00"
+    },
+    {
+      reviewer: "Sam",
+      rating: 5,
+      notes: "Worth crossing town for. Rich, balanced, and gone way too fast.",
+      createdAt: "2026-08-11T21:05:00-07:00"
+    }
+  ];
+
+  return seedProfiles
+    .map((review, index) => {
+      const burger = burgers[index];
+      if (!burger) return null;
+      return {
+        id: `seed-${index + 1}`,
+        burgerId: burger.id,
+        reviewer: review.reviewer,
+        rating: review.rating,
+        notes: review.notes,
+        photo: "",
+        createdAt: review.createdAt
+      };
+    })
+    .filter(Boolean);
+}
+
 async function loadEvents() {
   const fallback = fallbackEvent();
   try {
-    const [eventResponse, burgerResponse] = await Promise.all([
-      fetch("data/events.json"),
-      fetch("data/burgers.csv")
-    ]);
-    if (!eventResponse.ok || !burgerResponse.ok) return fallback;
-
-    const eventList = await eventResponse.json();
-    const burgerRows = parseCsv(await burgerResponse.text());
     const loadedEvents = {};
 
-    eventList.forEach((event) => {
-      const dates = event.starts_on && event.ends_on ? datesBetween(event.starts_on, event.ends_on, fallback["burger-week-2026"].dates) : [];
-      const sourceUrl = event.source_url || officialEventUrl;
+    await Promise.all(eventDefinitions.map(async (event) => {
+      const response = await fetch(event.dataFile);
+      if (!response.ok) throw new Error(`Could not load ${event.dataFile}`);
+
+      const burgerRows = parseCsv(await response.text());
+      const dates = dateRange(event.startsOn, event.endsOn);
+      const sourceUrl = event.sourceUrl || officialEventUrl;
       const burgers = burgerRows
         .filter((row) => row.event_id === event.id)
-        .map((row, index) => ({
-          id: row.id || `burger-${String(index + 1).padStart(3, "0")}`,
-          restaurant: row.restaurant || `Burger Week Placeholder ${String(index + 1).padStart(3, "0")}`,
-          burger: row.burger || "Burger details TBD",
-          description: row.description || "Replace with official listed burger details.",
-          neighborhood: row.neighborhood || "TBD",
-          address: row.address || "Portland, OR",
-          available: datesBetween(row.available_start || event.starts_on, row.available_end || event.ends_on, dates),
-          hours: row.hours || "Hours TBD",
-          tags: row.tags ? row.tags.split(";").filter(Boolean) : ["placeholder"],
-          restaurantPhoto: row.restaurant_photo || "data/photos/restaurant-placeholder.svg",
-          photoAlt: row.photo_alt || `${row.restaurant || "Restaurant"} official burger photo`,
-          mapsUrl: row.maps_url || `https://maps.apple.com/?q=${encodeURIComponent(`${row.restaurant || "Burger Week"} ${row.address || "Portland, OR"}`)}`,
-          everoutUrl: row.everout_url || sourceUrl,
-          map: coordinateToMapPoint(row.latitude, row.longitude, index)
-        }));
+        .map((row, index) => {
+          const availability = availabilityFromDayHours(row, dates);
+          return {
+            id: row.id || `burger-${String(index + 1).padStart(3, "0")}`,
+            restaurant: row.restaurant || `Burger Week Placeholder ${String(index + 1).padStart(3, "0")}`,
+            burger: row.burger || "Burger details TBD",
+            description: row.description || "Replace with official listed burger details.",
+            neighborhood: row.neighborhood || "TBD",
+            address: row.address || "Portland, OR",
+            available: availability.map((entry) => entry.date),
+            availability,
+            hours: formatWeeklyHours(availability),
+            tags: row.tags ? row.tags.split(";").filter(Boolean) : ["source-backed"],
+            restaurantPhoto: row.restaurant_photo || "data/photos/restaurant-placeholder.svg",
+            photoAlt: `${row.restaurant || "Restaurant"} burger photo`,
+            mapsUrl: row.maps_url || `https://maps.apple.com/?q=${encodeURIComponent(`${row.restaurant || "Burger Week"} ${row.address || "Portland, OR"}`)}`,
+            everoutUrl: row.everout_url || sourceUrl,
+            map: coordinateToMapPoint(row.latitude, row.longitude, index)
+          };
+        });
 
-      const targetCount = event.id === "burger-week-2026" ? 124 : burgers.length;
       loadedEvents[event.id] = {
         title: event.title,
         city: event.city,
-        price: event.price_label,
+        price: event.price,
         dates,
         sourceUrl,
-        burgers: padBurgerList(burgers, targetCount, dates, sourceUrl),
-        reviews: fallback[event.id]?.reviews || []
+        burgers: padBurgerList(burgers, event.targetCount || burgers.length, dates, sourceUrl),
+        reviews: seedReviewsForBurgers(burgers)
       };
-    });
+    }));
 
     return { ...fallback, ...loadedEvents };
   } catch {
@@ -906,9 +1069,10 @@ function renderFeed() {
     .map((review) => {
       const image = reviewImage(review);
       const hasToggle = Boolean(review.photo && review.burger.restaurantPhoto);
+      const placeholderArt = image?.src?.includes("restaurant-placeholder.svg");
       return `
         <article class="review-card">
-          <div class="photo-frame ${image ? "" : "placeholder-photo"}">
+          <div class="photo-frame ${image ? "" : "placeholder-photo"} ${placeholderArt ? "placeholder-art" : ""}">
             ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}">` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
             ${hasToggle ? `<button class="photo-toggle" type="button" data-photo-toggle="${escapeAttr(review.id)}" aria-label="Toggle restaurant photo">▣</button>` : ""}
             ${image ? `<span class="photo-source">${escapeHtml(image.source)}</span>` : ""}
@@ -1116,7 +1280,12 @@ function renderCalendar() {
           <h3>${escapeHtml(day)}</h3>
           <span>${available.length} burgers</span>
           <ul>
-            ${available.slice(0, 8).map((burger) => `<li>${escapeHtml(burger.restaurant)}</li>`).join("")}
+            ${available.slice(0, 8).map((burger) => `
+              <li>
+                <strong>${escapeHtml(burger.restaurant)}</strong>
+                <small>${escapeHtml(hoursForDate(burger, date))}</small>
+              </li>
+            `).join("")}
           </ul>
         </article>
       `;

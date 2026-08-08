@@ -1,6 +1,6 @@
 # Burger Photos
 
-Drop restaurant-posted burger photos in this folder and reference them from `data/burgers.csv` or `data/photos.csv`.
+Drop local restaurant-posted burger photos in this folder and reference them from `data/burger-week-2026.csv`. The CSV can also use direct source image URLs in `restaurant_photo`.
 
 Recommended naming:
 - `restaurant-slug.jpg`

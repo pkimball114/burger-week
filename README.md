@@ -26,17 +26,12 @@ Shared login, reviews, wants, hidden burgers, and review photo uploads are suppo
 
 ## Data
 
-The app loads editable placeholder data from:
+The app loads editable listing data from one event CSV:
 
-- [data/events.json](data/events.json)
-- [data/burgers.csv](data/burgers.csv)
-- [data/locations.csv](data/locations.csv)
-- [data/hours.csv](data/hours.csv)
-- [data/listed-burger-details.csv](data/listed-burger-details.csv)
-- [data/photos.csv](data/photos.csv)
+- [data/burger-week-2026.csv](data/burger-week-2026.csv)
 - [data/photos/](data/photos/)
 
-`data/burgers.csv` is the main file used by the app. If it has fewer than 124 Burger Week rows, the app pads the board with generated placeholders so the interface still matches the 2026 event size.
+`data/burger-week-2026.csv` is the main file used by the app. If it has fewer than 124 Burger Week rows, the app pads the board with generated placeholders so the interface still matches the 2026 event size. Day-specific `hours_monday` through `hours_sunday` columns determine which event dates each burger is available.
 
 The EverOut listing URL supplied for the project should be used as the canonical source for the complete 2026 restaurant and burger details:
 

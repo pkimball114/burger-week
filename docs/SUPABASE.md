@@ -19,7 +19,7 @@ In the project, apply [docs/supabase-schema.sql](supabase-schema.sql) from the S
 - Allows signed-in users to upload photos under their own user ID folder.
 - Keeps `event_id` and `food_item_id` as text on social tables so your static CSV remains the source of burger data.
 
-That last point matters: if you add rows to `data/burgers.csv` and push the static site, friends can review those new burger IDs without a database seed step. Keep `id` values stable once reviews exist.
+That last point matters: if you add rows to `data/burger-week-2026.csv` and push the static site, friends can review those new burger IDs without a database seed step. Keep `id` values stable once reviews exist.
 
 ## 2. Configure Auth URLs
 
@@ -105,4 +105,3 @@ If posting fails, check:
 - RLS policies exist on `reviews`, `wants`, `hidden_food_items`, and `storage.objects`.
 - Newer Supabase projects expose the tables to the Data API and grant access to `authenticated`.
 - The live URL is in Auth redirect URLs.
-
