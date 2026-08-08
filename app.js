@@ -63,9 +63,11 @@ const els = {
   loginForm: $("#loginForm"),
   loginNameInput: $("#loginNameInput"),
   loginEmailInput: $("#loginEmailInput"),
+  loginPasswordInput: $("#loginPasswordInput"),
   authStatus: $("#authStatus"),
   closeLogin: $("#closeLogin"),
   logoutButton: $("#logoutButton"),
+  resetPasswordButton: $("#resetPasswordButton"),
   reviewerInput: $("#reviewerInput"),
   hiddenList: $("#hiddenList"),
   hiddenCount: $("#hiddenCount")
@@ -81,6 +83,7 @@ let pendingHideBurgerId = "";
 let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
+let passwordRecoveryMode = false;
 let authStatusMessage = "";
 let remoteReviewsByEvent = {};
 let remoteWantsByEvent = {};
@@ -538,6 +541,21 @@ function setAuthStatus(message) {
   renderAuth();
 }
 
+async function resumePendingAuthAction() {
+  if (openReviewAfterLogin) {
+    openReviewAfterLogin = false;
+    openReviewComposer();
+  } else if (pendingWantBurgerId) {
+    const burgerId = pendingWantBurgerId;
+    pendingWantBurgerId = "";
+    await toggleWant(burgerId);
+  } else if (pendingHideBurgerId) {
+    const burgerId = pendingHideBurgerId;
+    pendingHideBurgerId = "";
+    await hideBurger(burgerId);
+  }
+}
+
 function defaultProfileName(user) {
   return user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Burger friend";
 }
@@ -546,9 +564,19 @@ async function ensureSupabaseProfile(displayName = "") {
   if (!supabaseClient || !supabaseSession?.user) return null;
 
   const user = supabaseSession.user;
+  const trimmedDisplayName = displayName.trim();
+
+  if (!trimmedDisplayName) {
+    const { data } = await supabaseClient.from("profiles").select("id, display_name, avatar_url").eq("id", user.id).maybeSingle();
+    if (data) {
+      supabaseProfile = data;
+      return data;
+    }
+  }
+
   const profile = {
     id: user.id,
-    display_name: displayName.trim() || defaultProfileName(user)
+    display_name: trimmedDisplayName || defaultProfileName(user)
   };
 
   const { data, error } = await supabaseClient
@@ -679,20 +707,27 @@ async function initializeSupabase() {
     await ensureSupabaseProfile();
     await refreshSupabaseData();
   } else {
-    setAuthStatus("Supabase is configured. Log in with an email magic link.");
+    setAuthStatus("Supabase is configured. Log in with email and password, or create an account if this is your first Burger Week visit.");
   }
 
-  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+  supabaseClient.auth.onAuthStateChange(async (authEvent, session) => {
     supabaseSession = session;
     supabaseProfile = null;
+    passwordRecoveryMode = authEvent === "PASSWORD_RECOVERY";
     if (session) {
       await ensureSupabaseProfile();
       await refreshSupabaseData();
+      if (passwordRecoveryMode) {
+        setAuthStatus("Password reset confirmed. Enter a new password below, then tap Log In to save it.");
+        els.loginPasswordInput.value = "";
+        if (!els.loginDialog.open) els.loginDialog.showModal();
+      }
     } else {
+      passwordRecoveryMode = false;
       remoteReviewsByEvent = {};
       remoteWantsByEvent = {};
       remoteHiddenByEvent = {};
-      setAuthStatus("Signed out of Supabase.");
+      setAuthStatus("Signed out. Log in with email and password when you are ready.");
     }
     renderAll();
   });
@@ -902,8 +937,8 @@ function renderAuth() {
   els.reviewerInput.value = account?.displayName || "";
   if (els.authStatus) {
     const fallbackStatus = hasUsableSupabaseConfig()
-      ? "Enter your email and name to receive a Supabase magic link."
-      : "Local fallback is active until config/supabase.js has your Supabase URL and publishable key.";
+      ? "Use email and password to log in. New here? Choose Create Account."
+      : "Local fallback is active until config/supabase.js has your Supabase URL and publishable key. Passwords are not saved in local fallback mode.";
     els.authStatus.textContent = authStatusMessage || fallbackStatus;
   }
   renderHiddenProfileList();
@@ -1417,6 +1452,7 @@ els.authButton.addEventListener("click", () => {
   const account = getAccount();
   els.loginNameInput.value = account?.displayName || "";
   els.loginEmailInput.value = account?.email || "";
+  els.loginPasswordInput.value = "";
   els.loginDialog.showModal();
 });
 els.closeLogin.addEventListener("click", () => els.loginDialog.close());
@@ -1426,54 +1462,133 @@ els.loginForm.addEventListener("submit", async (event) => {
   const form = new FormData(els.loginForm);
   const email = form.get("email").trim().toLowerCase();
   const displayName = form.get("displayName").trim();
+  const password = form.get("password") || "";
+  const intent = event.submitter?.value || "login";
 
   if (supabaseClient) {
     if (isSupabaseReady()) {
+      if (passwordRecoveryMode) {
+        if (!password || password.length < 6) {
+          setAuthStatus("Enter a new password with at least 6 characters, then tap Log In to save it.");
+          return;
+        }
+
+        const { error } = await supabaseClient.auth.updateUser({ password });
+        if (error) {
+          setAuthStatus(`Could not update password: ${error.message}`);
+          return;
+        }
+
+        passwordRecoveryMode = false;
+        await ensureSupabaseProfile(displayName);
+        await refreshSupabaseData();
+        setAuthStatus("Password updated. You are signed in.");
+        els.loginDialog.close();
+        els.loginForm.reset();
+        renderAll();
+        await resumePendingAuthAction();
+        return;
+      }
+
       await ensureSupabaseProfile(displayName);
       await refreshSupabaseData();
+      setAuthStatus(displayName ? `Display name updated to ${displayName}.` : "You are already signed in.");
       els.loginDialog.close();
       renderAll();
       return;
     }
 
-    const redirectTo = `${window.location.origin}${window.location.pathname}`;
-    const { error } = await supabaseClient.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: redirectTo,
-        data: { display_name: displayName }
-      }
-    });
-
-    if (error) {
-      setAuthStatus(`Magic link failed: ${error.message}`);
+    if (!password || password.length < 6) {
+      setAuthStatus("Enter the password for this Burger Week account. Passwords must be at least 6 characters.");
       return;
     }
 
-    setAuthStatus(`Magic link sent to ${email}. Open it on this device to finish logging in.`);
+    if (intent === "signup") {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            display_name: displayName || email.split("@")[0]
+          },
+          emailRedirectTo: `${window.location.origin}${window.location.pathname}`
+        }
+      });
+
+      if (error) {
+        setAuthStatus(`Could not create account: ${error.message}`);
+        return;
+      }
+
+      if (!data.session) {
+        setAuthStatus(`Account created for ${email}. Check your email to confirm it, then return here and log in with your password.`);
+        return;
+      }
+
+      supabaseSession = data.session;
+      await ensureSupabaseProfile(displayName);
+      await refreshSupabaseData();
+      setAuthStatus(`Account created. You are signed in as ${getAccount()?.displayName || email}.`);
+      els.loginDialog.close();
+      els.loginForm.reset();
+      renderAll();
+      await resumePendingAuthAction();
+      return;
+    }
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      setAuthStatus(`Login failed: ${error.message}`);
+      return;
+    }
+
+    supabaseSession = data.session;
+    await ensureSupabaseProfile(displayName);
+    await refreshSupabaseData();
+    setAuthStatus(`Signed in as ${getAccount()?.displayName || email}.`);
     els.loginDialog.close();
+    els.loginPasswordInput.value = "";
+    renderAll();
+    await resumePendingAuthAction();
     return;
   }
 
   setAccount({
     id: accountIdFromEmail(email),
-    displayName,
+    displayName: displayName || email.split("@")[0],
     email
   });
   els.loginDialog.close();
   renderAll();
-  if (openReviewAfterLogin) {
-    openReviewAfterLogin = false;
-    openReviewComposer();
-  } else if (pendingWantBurgerId) {
-    const burgerId = pendingWantBurgerId;
-    pendingWantBurgerId = "";
-    toggleWant(burgerId);
-  } else if (pendingHideBurgerId) {
-    const burgerId = pendingHideBurgerId;
-    pendingHideBurgerId = "";
-    hideBurger(burgerId);
+  await resumePendingAuthAction();
+});
+
+els.resetPasswordButton.addEventListener("click", async () => {
+  const email = els.loginEmailInput.value.trim().toLowerCase();
+  if (!email) {
+    setAuthStatus("Enter your email first, then tap Forgot password again.");
+    return;
   }
+
+  if (!supabaseClient) {
+    setAuthStatus("Password reset is available once Supabase is configured. Local fallback does not store passwords.");
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}${window.location.pathname}`
+  });
+
+  if (error) {
+    setAuthStatus(`Password reset failed: ${error.message}`);
+    return;
+  }
+
+  setAuthStatus(`Password reset email sent to ${email}. Check your inbox, update your password, then return here to log in.`);
 });
 
 els.logoutButton.addEventListener("click", async () => {
@@ -1481,10 +1596,11 @@ els.logoutButton.addEventListener("click", async () => {
     await supabaseClient.auth.signOut();
     supabaseSession = null;
     supabaseProfile = null;
+    passwordRecoveryMode = false;
     remoteReviewsByEvent = {};
     remoteWantsByEvent = {};
     remoteHiddenByEvent = {};
-    setAuthStatus("Signed out of Supabase.");
+    setAuthStatus("Signed out. Log in with email and password when you are ready.");
     els.loginDialog.close();
     renderAll();
     return;

@@ -153,6 +153,7 @@ button {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
   padding-top: clamp(58px, 11vh, 104px);
+  padding-bottom: clamp(96px, 15vh, 148px);
 }
 
 .eyebrow {
@@ -218,7 +219,7 @@ h1 {
 
 main {
   width: min(1180px, calc(100% - 32px));
-  margin: -64px auto 64px;
+  margin: -38px auto 64px;
   position: relative;
   z-index: 2;
 }
@@ -393,6 +394,7 @@ legend {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 
 .photo-frame.placeholder-art img {
@@ -951,12 +953,33 @@ legend {
 .dialog-actions {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
+}
+
+.auth-submit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.text-button {
+  width: fit-content;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ketchup-dark);
+  padding: 0;
+  box-shadow: none;
+  font-weight: 950;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 @media (max-width: 980px) {
   main {
-    margin-top: -44px;
+    margin-top: -30px;
   }
 
   .stats-grid,
@@ -1013,6 +1036,7 @@ legend {
 
   .hero-copy {
     padding-top: 68px;
+    padding-bottom: 128px;
   }
 
   .stats-grid,
@@ -1064,6 +1088,11 @@ legend {
   }
 
   .dialog-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .auth-submit-actions {
     flex-direction: column-reverse;
   }
 

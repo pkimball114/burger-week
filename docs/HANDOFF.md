@@ -98,7 +98,7 @@ Recommended backend work:
 1. Create or select a Supabase project.
 2. Apply `docs/supabase-schema.sql`.
 3. Create a private-ish Storage bucket for review photos and restaurant photos.
-4. Replace local login with Supabase Auth, likely invite-only magic links.
+4. Replace local login with Supabase Auth using email/password accounts and profile display names.
 5. Replace `localStorage` review storage with Supabase `reviews`.
 6. Preserve RLS behavior: friends can read shared event data/reviews, but users only edit/delete their own reviews.
 

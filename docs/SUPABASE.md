@@ -47,13 +47,15 @@ Use whichever fresh localhost port you are testing with. If you use a different 
 
 ## 3. Choose How Private Login Should Be
 
-For the fastest path, leave email magic-link signups enabled. Anyone with the URL can request a magic link, but RLS still protects writes by user.
+The app uses email and password for Supabase Auth. Friends choose a display name in the app, but reviews/wants/hidden burgers are tied to their Supabase user ID so the display name can change later.
 
 For a friend-only app:
 
 1. Disable open signups in Supabase Auth settings.
-2. Invite/create the allowed friend accounts from the Supabase Dashboard.
-3. Have friends use the same email address in the app.
+2. Invite/create the allowed friend accounts from the Supabase Dashboard, or temporarily enable signups while your group creates accounts.
+3. Have friends log in with email and password from the app.
+
+Password reset still sends an email. Make sure the production URL and any fresh localhost test ports are listed in the Auth redirect URLs above.
 
 ## 4. Add Public Config
 
@@ -92,8 +94,8 @@ https://pkimball114.github.io/burger-week/
 Expected behavior:
 
 1. Click `Log In`.
-2. Enter name and email.
-3. Open the Supabase magic link on the same browser/device.
+2. Enter display name, email, and password.
+3. Use `Create Account` for a new user, or `Log In` for an existing user.
 4. The top-right auth button changes to your display name.
 5. Add a review, optionally with a photo.
 6. Open the site in another browser after logging in with another user: shared reviews and wants should appear.

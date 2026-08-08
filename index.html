@@ -157,14 +157,18 @@
           <button class="icon-button" type="button" id="closeLogin" aria-label="Close">x</button>
         </div>
         <label>
-          <span>Name</span>
-          <input id="loginNameInput" name="displayName" required placeholder="Your name">
+          <span>Display name</span>
+          <input id="loginNameInput" name="displayName" autocomplete="nickname" placeholder="Shown on reviews">
         </label>
         <label>
           <span>Email</span>
-          <input id="loginEmailInput" name="email" type="email" required placeholder="you@example.com">
+          <input id="loginEmailInput" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
         </label>
-        <p class="dialog-note" id="authStatus">Local fallback is active until Supabase is configured.</p>
+        <label>
+          <span>Password</span>
+          <input id="loginPasswordInput" name="password" type="password" autocomplete="current-password" placeholder="Your password">
+        </label>
+        <p class="dialog-note" id="authStatus">Log in with email and password, or create an account if this is your first Burger Week visit.</p>
         <section class="profile-panel" aria-label="Hidden burgers">
           <div class="profile-panel-heading">
             <h3>Hidden Burgers</h3>
@@ -172,9 +176,13 @@
           </div>
           <div class="hidden-list" id="hiddenList"></div>
         </section>
+        <button class="text-button" type="button" id="resetPasswordButton">Forgot password?</button>
         <div class="dialog-actions">
           <button class="ghost-button" type="button" id="logoutButton">Log Out</button>
-          <button class="primary-action" type="submit">Continue</button>
+          <div class="auth-submit-actions">
+            <button class="ghost-button" type="submit" name="authIntent" value="signup">Create Account</button>
+            <button class="primary-action" type="submit" name="authIntent" value="login">Log In</button>
+          </div>
         </div>
       </form>
     </dialog>
