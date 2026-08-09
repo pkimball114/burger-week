@@ -24,6 +24,8 @@ The app can be published with GitHub Pages from the repository root. See [docs/P
 
 Shared login, reviews, wants, hidden burgers, and review photo uploads are supported through optional Supabase configuration. See [docs/SUPABASE.md](docs/SUPABASE.md). If Supabase is not configured, the app remains usable in local-only mode.
 
+For a no-domain, low-cost setup, disable Supabase email confirmation and keep signups friend-controlled. If you later want confirmation, invitation, or password reset emails without Supabase's default email limits, configure custom SMTP in [docs/SUPABASE.md](docs/SUPABASE.md#4-choose-an-auth-email-path).
+
 ## Data
 
 The app loads editable listing data from one event CSV:

@@ -483,6 +483,21 @@ function setAuthStatus(message) {
   renderAuth();
 }
 
+function authErrorMessage(prefix, error) {
+  const message = error?.message || "Unknown error";
+  const lowerMessage = message.toLowerCase();
+  const looksLikeEmailDeliveryLimit =
+    lowerMessage.includes("rate limit") ||
+    lowerMessage.includes("email rate") ||
+    lowerMessage.includes("email address not authorized") ||
+    lowerMessage.includes("over email send rate limit") ||
+    lowerMessage.includes("smtp");
+
+  if (!looksLikeEmailDeliveryLimit) return `${prefix}: ${message}`;
+
+  return `${prefix}: ${message}. If Confirm Email is enabled, turn it off for the budget setup or configure custom SMTP in docs/SUPABASE.md.`;
+}
+
 async function resumePendingAuthAction() {
   if (openReviewAfterLogin) {
     openReviewAfterLogin = false;
@@ -1537,7 +1552,7 @@ els.loginForm.addEventListener("submit", async (event) => {
       });
 
       if (error) {
-        setAuthStatus(`Could not create account: ${error.message}`);
+        setAuthStatus(authErrorMessage("Could not create account", error));
         return;
       }
 
@@ -1605,7 +1620,7 @@ els.resetPasswordButton.addEventListener("click", async () => {
   });
 
   if (error) {
-    setAuthStatus(`Password reset failed: ${error.message}`);
+    setAuthStatus(authErrorMessage("Password reset failed", error));
     return;
   }
 

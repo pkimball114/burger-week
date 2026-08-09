@@ -55,9 +55,58 @@ For a friend-only app:
 2. Invite/create the allowed friend accounts from the Supabase Dashboard, or temporarily enable signups while your group creates accounts.
 3. Have friends log in with email and password from the app.
 
-Password reset still sends an email. Make sure the production URL and any fresh localhost test ports are listed in the Auth redirect URLs above.
+Make sure the production URL and any fresh localhost test ports are listed in the Auth redirect URLs above.
 
-## 4. Add Public Config
+## 4. Choose An Auth Email Path
+
+For the current no-domain, low-cost setup, disable email confirmation in Supabase:
+
+```text
+Authentication -> Sign In / Providers -> Email -> Confirm Email: off
+```
+
+With email confirmation off, new accounts are implicitly confirmed at signup and the app avoids sending signup confirmation emails. Keep signups controlled by disabling open signups after your friends have accounts, or by manually creating accounts in Supabase.
+
+This budget path has one tradeoff: password reset, invitation, magic link, and email change flows still require Auth email delivery. If those become important, use custom SMTP with a verified sender domain.
+
+Supabase's default Auth email provider is only for early testing and has low, changeable rate limits. If you later buy or already control a domain, configure Resend as the project's custom SMTP provider in Supabase. Do not put the Resend API key in `app.js`, `config/supabase.js`, or any GitHub Pages asset.
+
+In Resend:
+
+1. Verify a sending domain you control.
+2. Keep the Burger Week Resend API key private. Use it as the SMTP password.
+
+In Supabase Dashboard:
+
+```text
+Authentication -> Email -> SMTP Settings
+```
+
+Enable custom SMTP and use:
+
+```text
+Sender email: no-reply@YOUR-VERIFIED-DOMAIN
+Sender name: Burger Week
+Host: smtp.resend.com
+Port: 465
+Username: resend
+Password: YOUR_RESEND_API_KEY
+```
+
+You can also apply the same settings through the Supabase Management API without writing secrets to the repo:
+
+```bash
+export SUPABASE_ACCESS_TOKEN="YOUR_SUPABASE_ACCESS_TOKEN"
+export SUPABASE_PROJECT_REF="lqczbhbkowcjjnjtrjjw"
+export RESEND_API_KEY="YOUR_RESEND_API_KEY"
+export SMTP_ADMIN_EMAIL="no-reply@YOUR-VERIFIED-DOMAIN"
+export SMTP_SENDER_NAME="Burger Week"
+sh scripts/configure-resend-smtp.sh
+```
+
+After saving, Supabase Auth sends confirmation, invitation, password reset, magic link, and email change emails through Resend instead of the default Supabase provider.
+
+## 5. Add Public Config
 
 Edit [config/supabase.js](../config/supabase.js):
 
@@ -71,7 +120,7 @@ window.BURGER_WEEK_CONFIG = {
 
 Use a publishable key if your project shows one. Older projects may show an `anon` key; that is acceptable for browser clients when RLS is enabled. Never use the service role key here.
 
-## 5. Deploy Config And App
+## 6. Deploy Config And App
 
 After editing config or static data:
 
@@ -83,7 +132,7 @@ git push
 
 GitHub Pages will deploy from the repo. Because `sw.js` precaches app files, bump `cacheName` whenever config, CSV, JS, or photo assets change.
 
-## 6. Verify
+## 7. Verify
 
 Open:
 
