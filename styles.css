@@ -149,6 +149,33 @@ button {
   background: var(--bun);
 }
 
+@media (min-width: 721px) {
+  .topbar-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .event-link,
+  .topbar select,
+  .auth-button {
+    height: 56px;
+    min-height: 56px;
+    white-space: nowrap;
+  }
+
+  .event-link {
+    width: 172px;
+  }
+
+  .topbar select {
+    width: 270px;
+    max-width: none;
+  }
+
+  .auth-button {
+    width: 160px;
+  }
+}
+
 .hero-copy {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
