@@ -639,6 +639,20 @@ legend {
   min-width: 0;
 }
 
+.burger-name-link {
+  width: fit-content;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  color: #6a5448;
+  padding: 0;
+  box-shadow: none;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
 .quick-links {
   display: inline-flex;
   gap: 8px;
@@ -675,6 +689,36 @@ legend {
   font-weight: 800;
 }
 
+.review-copy-tools {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 4px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #efe5d6;
+}
+
+.text-toggle {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  padding: 4px 8px;
+  box-shadow: none;
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.text-toggle.is-active {
+  background: var(--bun);
+}
+
+.review-copy {
+  white-space: pre-line;
+}
+
 .rating-row {
   margin-bottom: 10px;
   font-size: 1.1rem;
@@ -688,6 +732,16 @@ legend {
 .rating-row .filled,
 .stars button.selected {
   color: var(--bun-deep);
+}
+
+.wait-pill {
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: #fff3bf;
+  color: var(--ink);
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .tag-row {
@@ -878,11 +932,24 @@ legend {
 .availability-block {
   display: grid;
   gap: 6px;
+  width: 100%;
   margin-top: 12px;
   padding: 10px;
   border: 2px solid var(--ink);
   border-radius: 8px;
   background: #fff3bf;
+}
+
+.availability-button {
+  color: var(--ink);
+  text-align: left;
+  box-shadow: none;
+}
+
+.availability-button:hover,
+.availability-button:focus-visible {
+  outline: 4px solid var(--bun);
+  outline-offset: 3px;
 }
 
 .availability-block h4 {
@@ -898,6 +965,20 @@ legend {
   color: #6a5448;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.wait-report {
+  display: grid;
+  gap: 3px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 2px solid rgba(37, 25, 20, 0.28);
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.wait-report span {
+  color: #6a5448;
 }
 
 .burger-actions {
@@ -1043,6 +1124,79 @@ legend {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 12px;
+}
+
+.schedule-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(130px, 1fr)) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: var(--line);
+  border-radius: 8px;
+  background: var(--plate);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.schedule-form input,
+.schedule-form select {
+  width: 100%;
+  min-height: 44px;
+  border: var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 10px 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.schedule-list {
+  display: grid;
+  gap: 12px;
+}
+
+.schedule-item {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.5fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: var(--line);
+  border-radius: 8px;
+  background: var(--plate);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.schedule-item time,
+.schedule-item span,
+.schedule-item p {
+  color: #6a5448;
+  font-weight: 800;
+}
+
+.schedule-item strong,
+.schedule-item span,
+.schedule-item p {
+  display: block;
+}
+
+.schedule-item p {
+  margin: 4px 0 0;
+}
+
+.schedule-status {
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: #fff3bf;
+  padding: 6px 10px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.schedule-status.is-visited {
+  background: #e9fff9;
 }
 
 .day-card {
@@ -1333,6 +1487,15 @@ legend {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .schedule-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-note-field,
+  .schedule-form .primary-action {
+    grid-column: 1 / -1;
+  }
+
   .toolbar .search {
     grid-column: 1 / -1;
   }
@@ -1379,6 +1542,8 @@ legend {
 
   .stats-grid,
   .toolbar,
+  .schedule-form,
+  .schedule-item,
   .review-grid,
   .map-shell,
   .calendar-grid {

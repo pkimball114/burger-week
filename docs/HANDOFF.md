@@ -44,7 +44,7 @@ Implemented UX:
 - Burger Board rows include a Hide button. Hidden burgers are removed from that user's Burger Board and Hype List.
 - The login/profile modal includes a Hidden Burgers list with Unhide buttons.
 - Filters: search, area, friend, minimum rating, and sort.
-- Views: Friend Feed, Burger Board, Map Preview, Week Calendar.
+- Views: Friend Feed, Burger Board, Map Preview, Schedule.
 - Burger Board accommodates 124 burgers. If the editable event CSV has fewer rows, `app.js` pads generated placeholders to 124.
 
 Important limitation:

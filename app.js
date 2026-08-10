@@ -16,9 +16,17 @@ const reviewStoreKey = "burger-week-reviews-v2";
 const accountStoreKey = "burger-week-account-v1";
 const wantStoreKey = "burger-week-wants-v1";
 const hiddenStoreKey = "burger-week-hidden-v1";
+const waitReportStoreKey = "burger-week-wait-reports-v1";
+const scheduleStoreKey = "burger-week-schedule-v1";
 const supabasePhotoBucket = "burger-review-photos";
 const reviewPhotoMaxDimension = 1600;
 const reviewPhotoJpegQuality = 0.82;
+const waitTimeOptions = [
+  ["immediate", "Immediate (0-5 minutes)"],
+  ["standard", "Standard (5-15 minutes)"],
+  ["long", "Long (15-30 minutes)"],
+  ["very-long", "Very Long (30+ minutes)"]
+];
 const dayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
 const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short" });
 const timestampFormatter = new Intl.DateTimeFormat("en-US", {
@@ -52,7 +60,13 @@ const els = {
   resultCount: $("#resultCount"),
   mapPins: $("#mapPins"),
   mapList: $("#mapList"),
-  calendarGrid: $("#calendarGrid"),
+  scheduleForm: $("#scheduleForm"),
+  scheduleBurgerSelect: $("#scheduleBurgerSelect"),
+  scheduleDateInput: $("#scheduleDateInput"),
+  scheduleTimeInput: $("#scheduleTimeInput"),
+  scheduleStatusSelect: $("#scheduleStatusSelect"),
+  scheduleNoteInput: $("#scheduleNoteInput"),
+  scheduleList: $("#scheduleList"),
   dialog: $("#reviewDialog"),
   openComposer: $("#openComposer"),
   closeComposer: $("#closeComposer"),
@@ -62,6 +76,7 @@ const els = {
   ratingInput: $("#ratingInput"),
   ratingOutput: $("#ratingOutput"),
   photoInput: $("#photoInput"),
+  waitTimeInput: $("#waitTimeInput"),
   postReviewButton: $("#postReviewButton"),
   clearLocalData: $("#clearLocalData"),
   authButton: $("#authButton"),
@@ -74,6 +89,13 @@ const els = {
   appStatus: $("#appStatus"),
   reviewStatus: $("#reviewStatus"),
   closeLogin: $("#closeLogin"),
+  waitDialog: $("#waitDialog"),
+  waitForm: $("#waitForm"),
+  waitBurgerName: $("#waitBurgerName"),
+  waitReportSelect: $("#waitReportSelect"),
+  waitReportNoteInput: $("#waitReportNoteInput"),
+  closeWaitDialog: $("#closeWaitDialog"),
+  cancelWaitReport: $("#cancelWaitReport"),
   logoutButton: $("#logoutButton"),
   resetPasswordButton: $("#resetPasswordButton"),
   reviewerInput: $("#reviewerInput"),
@@ -92,13 +114,17 @@ let photoViewByReview = {};
 let openReviewAfterLogin = false;
 let pendingWantBurgerId = "";
 let pendingHideBurgerId = "";
+let pendingWaitBurgerId = "";
+let activeWaitBurgerId = "";
 let controlsCollapsed = false;
 let hypeCollapsed = false;
 let statsScope = "personal";
 let wantedStatIndex = 0;
+let reviewTextViewByReview = {};
 let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
+let supabaseReviewWaitTimeSupported = true;
 let passwordRecoveryMode = false;
 let authStatusMessage = "";
 let remoteReviewsByEvent = {};
@@ -238,6 +264,106 @@ function setReviewActionBusy(action, reviewId, isBusy) {
     pendingReviewActions.delete(key);
   }
   renderFeed();
+}
+
+function waitTimeLabel(value = "") {
+  return waitTimeOptions.find(([key]) => key === value)?.[1] || "";
+}
+
+function waitTimeValueFromText(text = "") {
+  const lower = text.toLowerCase();
+  if (lower.includes("very long")) return "very-long";
+  if (lower.includes("long (15")) return "long";
+  if (lower.includes("standard")) return "standard";
+  if (lower.includes("immediate")) return "immediate";
+  return "";
+}
+
+function appendWaitTimeToNotes(notes, waitTime) {
+  const label = waitTimeLabel(waitTime);
+  if (!label) return notes;
+  const trimmedNotes = notes.trim();
+  return `${trimmedNotes}${trimmedNotes ? "\n\n" : ""}Wait time: ${label}`;
+}
+
+function loadJsonStore(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveJsonStore(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function accountEventBucket(store, account) {
+  if (!account) return null;
+  store[currentEventId] ||= {};
+  store[currentEventId][account.id] ||= {};
+  return store[currentEventId][account.id];
+}
+
+function accountWaitReports() {
+  const account = getAccount();
+  if (!account) return {};
+  return loadJsonStore(waitReportStoreKey)[currentEventId]?.[account.id] || {};
+}
+
+function latestWaitReport(burgerId) {
+  return accountWaitReports()[burgerId] || null;
+}
+
+function saveWaitReport(burgerId, waitTime, note = "") {
+  const account = getAccount();
+  if (!account) return false;
+  const store = loadJsonStore(waitReportStoreKey);
+  const bucket = accountEventBucket(store, account);
+  const burger = getBurger(burgerId);
+  bucket[burgerId] = {
+    burgerId,
+    restaurant: burger.restaurant,
+    burger: burger.burger,
+    waitTime,
+    note: note.trim(),
+    reporter: account.displayName,
+    profileId: account.id,
+    reportedAt: new Date().toISOString()
+  };
+  saveJsonStore(waitReportStoreKey, store);
+  return true;
+}
+
+function accountScheduleEntries() {
+  const account = getAccount();
+  if (!account) return [];
+  return Object.values(loadJsonStore(scheduleStoreKey)[currentEventId]?.[account.id] || {});
+}
+
+function saveScheduleEntry(entry) {
+  const account = getAccount();
+  if (!account) return false;
+  const store = loadJsonStore(scheduleStoreKey);
+  const bucket = accountEventBucket(store, account);
+  bucket[entry.id] = entry;
+  saveJsonStore(scheduleStoreKey, store);
+  return true;
+}
+
+function deleteScheduleEntry(entryId) {
+  const account = getAccount();
+  if (!account) return;
+  const store = loadJsonStore(scheduleStoreKey);
+  if (store[currentEventId]?.[account.id]?.[entryId]) {
+    delete store[currentEventId][account.id][entryId];
+    saveJsonStore(scheduleStoreKey, store);
+  }
+}
+
+function supabaseMissingColumnError(error, columnName) {
+  const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return error?.code === "PGRST204" || message.includes(columnName.toLowerCase());
 }
 
 function parseCsv(text) {
@@ -587,6 +713,10 @@ async function resumePendingAuthAction() {
     const burgerId = pendingHideBurgerId;
     pendingHideBurgerId = "";
     await hideBurger(burgerId);
+  } else if (pendingWaitBurgerId) {
+    const burgerId = pendingWaitBurgerId;
+    pendingWaitBurgerId = "";
+    openWaitReportDialog(burgerId);
   }
 }
 
@@ -638,6 +768,7 @@ async function signedPhotoUrl(path) {
 }
 
 async function mapSupabaseReview(row) {
+  const waitTimeFromNotes = waitTimeValueFromText(row.notes || "");
   return {
     id: row.id,
     burgerId: row.food_item_id,
@@ -645,6 +776,7 @@ async function mapSupabaseReview(row) {
     profileId: row.profile_id,
     rating: Number(row.rating),
     notes: row.notes || "",
+    waitTime: row.wait_time || waitTimeFromNotes,
     photo: await signedPhotoUrl(row.photo_path),
     photoPath: row.photo_path || "",
     createdAt: row.created_at,
@@ -653,13 +785,23 @@ async function mapSupabaseReview(row) {
 }
 
 async function loadSupabaseReviews() {
+  const reviewSelect = supabaseReviewWaitTimeSupported
+    ? "id,event_id,food_item_id,profile_id,rating,notes,wait_time,photo_path,created_at,updated_at,profiles(display_name)"
+    : "id,event_id,food_item_id,profile_id,rating,notes,photo_path,created_at,updated_at,profiles(display_name)";
   const { data, error } = await supabaseClient
     .from("reviews")
-    .select("id,event_id,food_item_id,profile_id,rating,notes,photo_path,created_at,updated_at,profiles(display_name)")
+    .select(reviewSelect)
     .eq("event_id", currentEventId)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    if (supabaseReviewWaitTimeSupported && supabaseMissingColumnError(error, "wait_time")) {
+      supabaseReviewWaitTimeSupported = false;
+      await loadSupabaseReviews();
+      return;
+    }
+    throw error;
+  }
 
   const mapped = await Promise.all((data || []).map(mapSupabaseReview));
   remoteReviewsByEvent[currentEventId] = mapped;
@@ -1108,6 +1250,25 @@ function hydrateFilters() {
   els.burgerSelect.innerHTML = event.burgers
     .map((burger) => `<option value="${escapeAttr(burger.id)}">${escapeHtml(burger.restaurant)} - ${escapeHtml(burger.burger)}</option>`)
     .join("");
+  if (els.scheduleBurgerSelect) {
+    const currentScheduleBurger = els.scheduleBurgerSelect.value;
+    els.scheduleBurgerSelect.innerHTML = event.burgers
+      .map((burger) => `<option value="${escapeAttr(burger.id)}">${escapeHtml(burger.restaurant)} - ${escapeHtml(burger.burger)}</option>`)
+      .join("");
+    if (event.burgers.some((burger) => burger.id === currentScheduleBurger)) {
+      els.scheduleBurgerSelect.value = currentScheduleBurger;
+    }
+  }
+  if (els.scheduleDateInput && !els.scheduleDateInput.value) {
+    els.scheduleDateInput.value = event.dates[0] || "";
+  }
+  if (els.scheduleDateInput) {
+    els.scheduleDateInput.min = event.dates[0] || "";
+    els.scheduleDateInput.max = event.dates[event.dates.length - 1] || "";
+    if (!event.dates.includes(els.scheduleDateInput.value)) {
+      els.scheduleDateInput.value = event.dates[0] || "";
+    }
+  }
 
   els.neighborhoodFilter.value = areas.includes(currentArea) ? currentArea : "all";
   els.friendFilter.value = friends.includes(currentFriend) ? currentFriend : "all";
@@ -1122,6 +1283,7 @@ function getFilteredReviews() {
       const haystack = [
         review.reviewer,
         review.notes,
+        waitTimeLabel(review.waitTime),
         review.burger.restaurant,
         review.burger.burger,
         review.burger.description,
@@ -1259,6 +1421,8 @@ function renderFeed() {
       const deleteBusy = reviewActionBusy("delete", review.id);
       const photoBusy = reviewActionBusy("photo", review.id);
       const photoLabel = review.photo ? "Replace Photo" : "Add Photo";
+      const showingDescription = reviewTextViewByReview[review.id] === "description";
+      const reviewCopy = showingDescription ? review.burger.description || "No restaurant description." : review.notes || "No notes.";
       return `
         <article class="review-card">
           <div class="photo-frame ${image ? "" : "placeholder-photo"} ${placeholderArt ? "placeholder-art" : ""}">
@@ -1274,7 +1438,9 @@ function renderFeed() {
             <div class="review-card-title">
               <div>
                 <h3>${escapeHtml(review.burger.restaurant)}</h3>
-                <p class="burger-name">${escapeHtml(review.burger.burger)}</p>
+                <button class="burger-name burger-name-link" type="button" data-jump-burger="${escapeAttr(review.burgerId)}">
+                  ${escapeHtml(review.burger.burger)}
+                </button>
               </div>
               <div class="quick-links" aria-label="Review links">
                 <a href="${escapeAttr(review.burger.mapsUrl)}" target="_blank" rel="noreferrer" aria-label="Open restaurant location in maps">⌖</a>
@@ -1284,8 +1450,13 @@ function renderFeed() {
             <div class="rating-row" aria-label="${formatRating(review.rating)} out of 5 stars">
               ${renderStars(review.rating)}
               <b>${formatRating(review.rating)}</b>
+              ${review.waitTime ? `<span class="wait-pill">${escapeHtml(waitTimeLabel(review.waitTime))}</span>` : ""}
             </div>
-            <p>${escapeHtml(review.notes || "No notes.")}</p>
+            <div class="review-copy-tools">
+              <button class="text-toggle ${!showingDescription ? "is-active" : ""}" type="button" data-review-copy-toggle="${escapeAttr(review.id)}" data-copy-view="notes">Review</button>
+              <button class="text-toggle ${showingDescription ? "is-active" : ""}" type="button" data-review-copy-toggle="${escapeAttr(review.id)}" data-copy-view="description">Burger</button>
+            </div>
+            <p class="review-copy">${escapeHtml(reviewCopy)}</p>
             <div class="tag-row">
               <span>${escapeHtml(review.burger.neighborhood)}</span>
               ${displayTags(review.burger).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
@@ -1431,6 +1602,7 @@ function renderBurgerList() {
       const wanted = accountWantsBurger(burger.id);
       const visibleTags = displayTags(burger);
       const placeholderArt = burger.restaurantPhoto?.includes("restaurant-placeholder.svg");
+      const waitReport = latestWaitReport(burger.id);
       const availability = burger.availability?.length
         ? burger.availability.map((entry) => `<span><b>${escapeHtml(entry.dayLabel)}</b> ${escapeHtml(entry.hoursText)}</span>`).join("")
         : `<span>${escapeHtml(burger.hours || "Hours TBD")}</span>`;
@@ -1451,12 +1623,18 @@ function renderBurgerList() {
               </div>
             </div>
             <p class="burger-description">${escapeHtml(burger.description || "")}</p>
-            <section class="availability-block" aria-label="Available times">
+            <button class="availability-block availability-button" type="button" data-report-wait="${escapeAttr(burger.id)}" aria-label="Report wait time for ${escapeAttr(burger.restaurant)}">
               <h4>Available</h4>
               <div class="availability-list">
                 ${availability}
               </div>
-            </section>
+              ${waitReport ? `
+                <p class="wait-report">
+                  ${escapeHtml(waitReport.reporter)} reported ${escapeHtml(waitTimeLabel(waitReport.waitTime))}
+                  ${waitReport.note ? `<span>${escapeHtml(waitReport.note)}</span>` : ""}
+                </p>
+              ` : ""}
+            </button>
             <div class="tag-row">
               <span>${escapeHtml(burger.neighborhood)}</span>
               ${visibleTags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
@@ -1505,27 +1683,48 @@ function renderMap() {
     .join("");
 }
 
-function renderCalendar() {
-  const event = getEvent();
-  els.calendarGrid.innerHTML = event.dates
-    .map((date) => {
-      const available = event.burgers.filter((burger) => burger.available.includes(date));
-      const day = dayFormatter.format(new Date(`${date}T12:00:00`));
-      return `
-        <article class="day-card">
-          <h3>${escapeHtml(day)}</h3>
-          <span>${available.length} burgers</span>
-          <ul>
-            ${available.slice(0, 8).map((burger) => `
-              <li>
-                <strong>${escapeHtml(burger.restaurant)}</strong>
-                <small>${escapeHtml(hoursForDate(burger, date))}</small>
-              </li>
-            `).join("")}
-          </ul>
-        </article>
-      `;
-    })
+function renderSchedule() {
+  if (!els.scheduleList) return;
+  const account = getAccount();
+  if (!account) {
+    els.scheduleList.innerHTML = `
+      <div class="empty-state">
+        <h3>Log in to build your schedule.</h3>
+        <p>Planned and visited stops stay tied to your account on this device.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const entries = accountScheduleEntries()
+    .map((entry) => ({ ...entry, burger: getBurger(entry.burgerId) }))
+    .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+
+  if (!entries.length) {
+    els.scheduleList.innerHTML = `
+      <div class="empty-state">
+        <h3>No stops scheduled yet.</h3>
+        <p>Add a place you visited or a place you want to reach later.</p>
+      </div>
+    `;
+    return;
+  }
+
+  els.scheduleList.innerHTML = entries
+    .map((entry) => `
+      <article class="schedule-item">
+        <time datetime="${escapeAttr(`${entry.date}T${entry.time}`)}">
+          ${escapeHtml(dayFormatter.format(new Date(`${entry.date}T12:00:00`)))} · ${escapeHtml(entry.time)}
+        </time>
+        <div>
+          <strong>${escapeHtml(entry.burger.restaurant)}</strong>
+          <span>${escapeHtml(entry.burger.burger)}</span>
+          ${entry.note ? `<p>${escapeHtml(entry.note)}</p>` : ""}
+        </div>
+        <span class="schedule-status ${entry.status === "visited" ? "is-visited" : ""}">${entry.status === "visited" ? "Visited" : "Planned"}</span>
+        <button class="ghost-button compact-button" type="button" data-delete-schedule="${escapeAttr(entry.id)}">Remove</button>
+      </article>
+    `)
     .join("");
 }
 
@@ -1551,7 +1750,7 @@ function renderAll() {
   renderHypeList();
   renderBurgerList();
   renderMap();
-  renderCalendar();
+  renderSchedule();
   renderStarInput();
 }
 
@@ -1580,6 +1779,29 @@ function openImageDialog({ src, alt, caption }) {
   els.imageDialogPhoto.alt = alt || caption || "Burger photo";
   els.imageDialogCaption.textContent = caption || "";
   els.imageDialog.showModal();
+}
+
+function openWaitReportDialog(burgerId) {
+  const account = getAccount();
+  if (!account) {
+    pendingWaitBurgerId = burgerId;
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const burger = getBurger(burgerId);
+  const report = latestWaitReport(burgerId);
+  activeWaitBurgerId = burgerId;
+  els.waitBurgerName.textContent = `${burger.restaurant} - ${burger.burger}`;
+  els.waitReportSelect.value = report?.waitTime || "standard";
+  els.waitReportNoteInput.value = report?.note || "";
+  els.waitDialog.showModal();
+}
+
+function closeWaitReportDialog() {
+  activeWaitBurgerId = "";
+  if (els.waitDialog?.open) els.waitDialog.close();
+  els.waitForm.reset();
 }
 
 function closeImageDialog() {
@@ -2035,6 +2257,7 @@ els.logoutButton.addEventListener("click", async () => {
 
   setAccount(null);
   els.loginDialog.close();
+  renderAll();
 });
 
 els.starInput.addEventListener("click", (event) => {
@@ -2049,6 +2272,8 @@ els.reviewGrid.addEventListener("click", (event) => {
   const photoButton = event.target.closest("[data-photo-toggle]");
   const addPhotoButton = event.target.closest("[data-add-review-photo]");
   const deleteReviewButton = event.target.closest("[data-delete-review]");
+  const copyToggleButton = event.target.closest("[data-review-copy-toggle]");
+  const jumpBurgerButton = event.target.closest("[data-jump-burger]");
 
   if (friendButton) {
     filters.friend = friendButton.dataset.friendFilter;
@@ -2061,6 +2286,15 @@ els.reviewGrid.addEventListener("click", (event) => {
     const reviewId = photoButton.dataset.photoToggle;
     photoViewByReview[reviewId] = photoViewByReview[reviewId] === "official" ? "friend" : "official";
     renderFeed();
+  }
+
+  if (copyToggleButton) {
+    reviewTextViewByReview[copyToggleButton.dataset.reviewCopyToggle] = copyToggleButton.dataset.copyView;
+    renderFeed();
+  }
+
+  if (jumpBurgerButton) {
+    jumpToBurger(jumpBurgerButton.dataset.jumpBurger);
   }
 
   if (addPhotoButton) {
@@ -2092,12 +2326,17 @@ els.burgerList.addEventListener("click", (event) => {
   const wantButton = event.target.closest("[data-want-burger]");
   const hideButton = event.target.closest("[data-hide-burger]");
   const previewButton = event.target.closest("[data-preview-photo]");
+  const waitButton = event.target.closest("[data-report-wait]");
   if (previewButton) {
     openImageDialog({
       src: previewButton.dataset.previewPhoto,
       alt: previewButton.dataset.previewAlt,
       caption: previewButton.dataset.previewCaption
     });
+    return;
+  }
+  if (waitButton) {
+    openWaitReportDialog(waitButton.dataset.reportWait);
     return;
   }
   if (wantButton) {
@@ -2127,6 +2366,51 @@ els.hiddenList.addEventListener("click", (event) => {
   unhideBurger(unhideButton.dataset.unhideBurger);
 });
 
+els.scheduleForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const account = getAccount();
+  if (!account) {
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const form = new FormData(els.scheduleForm);
+  const burger = getBurger(form.get("burgerId"));
+  const entry = {
+    id: crypto.randomUUID(),
+    eventId: currentEventId,
+    burgerId: burger.id,
+    profileId: account.id,
+    displayName: account.displayName,
+    date: form.get("date"),
+    time: form.get("time"),
+    status: form.get("status"),
+    note: form.get("note").trim(),
+    createdAt: new Date().toISOString()
+  };
+
+  saveScheduleEntry(entry);
+  els.scheduleNoteInput.value = "";
+  renderSchedule();
+});
+
+els.scheduleList?.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-delete-schedule]");
+  if (!deleteButton) return;
+  deleteScheduleEntry(deleteButton.dataset.deleteSchedule);
+  renderSchedule();
+});
+
+els.closeWaitDialog?.addEventListener("click", closeWaitReportDialog);
+els.cancelWaitReport?.addEventListener("click", closeWaitReportDialog);
+els.waitForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!activeWaitBurgerId) return;
+  saveWaitReport(activeWaitBurgerId, els.waitReportSelect.value, els.waitReportNoteInput.value);
+  closeWaitReportDialog();
+  renderBurgerBoardState();
+});
+
 els.closeImageDialog.addEventListener("click", closeImageDialog);
 els.imageDialog.addEventListener("click", (event) => {
   if (event.target === els.imageDialog || event.target === els.imageDialogPhoto) {
@@ -2149,18 +2433,31 @@ els.reviewForm.addEventListener("submit", async (event) => {
 
   const form = new FormData(els.reviewForm);
   const reviewId = crypto.randomUUID();
+  const reviewWaitTime = form.get("waitTime");
+  const reviewNotes = form.get("notes").trim();
 
   try {
     if (isSupabaseReady()) {
-      const { error } = await supabaseClient.from("reviews").insert({
+      const reviewPayload = {
         id: reviewId,
         event_id: currentEventId,
         food_item_id: form.get("burgerId"),
         profile_id: account.id,
         rating: Number(form.get("rating")),
-        notes: form.get("notes").trim(),
+        notes: reviewNotes,
         photo_path: null
-      });
+      };
+      if (reviewWaitTime && supabaseReviewWaitTimeSupported) {
+        reviewPayload.wait_time = reviewWaitTime;
+      }
+
+      let { error } = await supabaseClient.from("reviews").insert(reviewPayload);
+      if (error && reviewPayload.wait_time && supabaseMissingColumnError(error, "wait_time")) {
+        supabaseReviewWaitTimeSupported = false;
+        delete reviewPayload.wait_time;
+        reviewPayload.notes = appendWaitTimeToNotes(reviewNotes, reviewWaitTime);
+        ({ error } = await supabaseClient.from("reviews").insert(reviewPayload));
+      }
 
       if (error) throw error;
 
@@ -2196,7 +2493,8 @@ els.reviewForm.addEventListener("submit", async (event) => {
       reviewer: account.displayName,
       profileId: account.id,
       rating: Number(form.get("rating")),
-      notes: form.get("notes").trim(),
+      notes: reviewNotes,
+      waitTime: reviewWaitTime,
       photo,
       createdAt: new Date().toISOString()
     };

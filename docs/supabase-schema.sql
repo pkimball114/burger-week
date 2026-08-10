@@ -44,6 +44,7 @@ create table public.reviews (
   profile_id uuid not null references public.profiles(id) on delete cascade,
   rating numeric(3, 2) not null check (rating >= 0 and rating <= 5 and mod(rating * 100, 25) = 0),
   notes text,
+  wait_time text check (wait_time in ('immediate', 'standard', 'long', 'very-long')),
   photo_path text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
