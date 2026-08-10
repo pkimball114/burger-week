@@ -1240,7 +1240,7 @@ function renderFeed() {
             ${canCurrentUserEditReview(review) ? `
               <div class="review-actions">
                 <button class="delete-review-button" type="button" data-delete-review="${escapeAttr(review.id)}" aria-label="Delete your review for ${escapeAttr(review.burger.restaurant)}">
-                  <span aria-hidden="true">🗑</span>
+                  Delete Post
                 </button>
                 <button class="ghost-button compact-button" type="button" data-add-review-photo="${escapeAttr(review.id)}">
                   ${review.photo ? "Replace Photo" : "Add Photo"}
@@ -1619,17 +1619,20 @@ function safeFileName(fileName = "burger-photo") {
   return fileName.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/^-|-$/g, "") || "burger-photo";
 }
 
-async function uploadSupabaseReviewPhoto(file, reviewId) {
+async function uploadSupabaseReviewPhoto(file, reviewId, shouldReplace = false) {
   if (!file || !isSupabaseReady()) return "";
 
   const preparedFile = await prepareReviewPhotoFile(file);
   const extension = safeFileName(preparedFile.name).split(".").pop() || "jpg";
   const path = `${supabaseSession.user.id}/${currentEventId}/${reviewId}.${extension}`;
-  const { error } = await supabaseClient.storage.from(supabasePhotoBucket).upload(path, preparedFile, {
+  const uploadBody = await preparedFile.arrayBuffer();
+  const uploadOptions = {
     cacheControl: "3600",
-    contentType: preparedFile.type || "image/jpeg",
-    upsert: true
-  });
+    contentType: "image/jpeg"
+  };
+  if (shouldReplace) uploadOptions.upsert = true;
+
+  const { error } = await supabaseClient.storage.from(supabasePhotoBucket).upload(path, uploadBody, uploadOptions);
 
   if (error) throw error;
   return path;
@@ -1679,7 +1682,7 @@ async function deleteReview(reviewId) {
 }
 
 async function attachSupabaseReviewPhoto(reviewId, file, previousPhotoPath = "") {
-  const photoPath = await uploadSupabaseReviewPhoto(file, reviewId);
+  const photoPath = await uploadSupabaseReviewPhoto(file, reviewId, Boolean(previousPhotoPath));
   if (!photoPath) return "";
 
   const { error } = await supabaseClient

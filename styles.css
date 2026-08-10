@@ -667,19 +667,14 @@ legend {
 .delete-review-button {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  min-height: 38px;
   border: var(--line);
   border-radius: 8px;
-  background: #ffe4df;
-  color: var(--ketchup-dark);
-  box-shadow: 3px 3px 0 var(--ink);
+  background: var(--ketchup);
+  color: white;
+  padding: 7px 10px;
+  box-shadow: 2px 2px 0 var(--ink);
   font-weight: 950;
-}
-
-.delete-review-button span {
-  font-size: 1.25rem;
-  line-height: 1;
 }
 
 .burger-list {
