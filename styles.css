@@ -346,12 +346,29 @@ main {
 }
 
 .stat-card {
+  display: grid;
+  align-content: start;
   min-height: 94px;
   padding: 12px;
   background: var(--bun);
   border: var(--line);
   border-radius: 8px;
   box-shadow: 4px 4px 0 var(--ink);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+}
+
+.stat-button {
+  width: 100%;
+  appearance: none;
+  cursor: pointer;
+}
+
+.stat-button:hover,
+.stat-button:focus-visible {
+  outline: 4px solid var(--plate);
+  outline-offset: 3px;
 }
 
 .stat-card span {
@@ -366,6 +383,13 @@ main {
   display: block;
   font-size: clamp(1.2rem, 3vw, 2rem);
   line-height: 1;
+}
+
+.stat-card small {
+  display: block;
+  margin-top: 8px;
+  color: #6a5448;
+  font-weight: 900;
 }
 
 .toolbar {
@@ -634,8 +658,28 @@ legend {
 
 .review-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-top: 12px;
+}
+
+.delete-review-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: var(--line);
+  border-radius: 8px;
+  background: #ffe4df;
+  color: var(--ketchup-dark);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 950;
+}
+
+.delete-review-button span {
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .burger-list {

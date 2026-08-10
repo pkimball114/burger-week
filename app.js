@@ -17,6 +17,8 @@ const accountStoreKey = "burger-week-account-v1";
 const wantStoreKey = "burger-week-wants-v1";
 const hiddenStoreKey = "burger-week-hidden-v1";
 const supabasePhotoBucket = "burger-review-photos";
+const reviewPhotoMaxDimension = 1600;
+const reviewPhotoJpegQuality = 0.82;
 const dayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
 const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short" });
 const timestampFormatter = new Intl.DateTimeFormat("en-US", {
@@ -91,6 +93,8 @@ let pendingWantBurgerId = "";
 let pendingHideBurgerId = "";
 let controlsCollapsed = false;
 let hypeCollapsed = false;
+let statsScope = "personal";
+let wantedStatIndex = 0;
 let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
@@ -593,7 +597,8 @@ async function mapSupabaseReview(row) {
     notes: row.notes || "",
     photo: await signedPhotoUrl(row.photo_path),
     photoPath: row.photo_path || "",
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -1005,6 +1010,22 @@ function getReviews() {
   }));
 }
 
+function reviewBelongsToAccount(review, account) {
+  return Boolean(
+    account &&
+    (review.profileId === account.id || (!review.profileId && review.reviewer === account.displayName))
+  );
+}
+
+function summarizeReviews(reviews) {
+  const avg = reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
+  return {
+    reviewCount: reviews.length,
+    spotCount: new Set(reviews.map((review) => review.burgerId)).size,
+    avg
+  };
+}
+
 function formatRating(value) {
   return Number(value).toFixed(2);
 }
@@ -1075,26 +1096,65 @@ function getFilteredReviews() {
 
 function renderStats() {
   const reviews = getReviews();
-  const uniqueSpots = new Set(reviews.map((review) => review.burgerId)).size;
-  const avg = reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
+  const account = getAccount();
+  const canShowPersonalStats = Boolean(account);
+  const activeStatsScope = canShowPersonalStats ? statsScope : "group";
+  const personalReviews = canShowPersonalStats ? reviews.filter((review) => reviewBelongsToAccount(review, account)) : [];
+  const scopedSummary = summarizeReviews(activeStatsScope === "personal" ? personalReviews : reviews);
   const topReview = [...reviews].sort((a, b) => b.rating - a.rating)[0];
   const topSpot = topReview ? getBurger(topReview.burgerId).restaurant : "No reviews";
-  const topWanted = mostWantedBurgers(1)[0];
+  const topWantedList = mostWantedBurgers(5);
+  const wantedIndex = topWantedList.length ? wantedStatIndex % topWantedList.length : 0;
+  const topWanted = topWantedList[wantedIndex];
+  const scopeLabel = activeStatsScope === "personal" ? "Personal" : "Group";
+  const scopeButtonAttributes = canShowPersonalStats
+    ? `type="button" data-toggle-stats-scope aria-label="Show ${activeStatsScope === "personal" ? "group" : "personal"} stats"`
+    : "";
 
   const stats = [
-    ["Reviews", reviews.length],
-    ["Spots Tried", uniqueSpots],
-    ["Avg Rating", avg ? formatRating(avg) : "0.00"],
-    ["Top Right Now", topSpot],
-    ["Most Wanted", topWanted ? topWanted.burger.restaurant : "No hype yet"]
+    {
+      label: activeStatsScope === "personal" ? "My Reviews" : "Group Reviews",
+      value: scopedSummary.reviewCount,
+      detail: scopeLabel,
+      interactive: canShowPersonalStats,
+      attributes: scopeButtonAttributes
+    },
+    {
+      label: activeStatsScope === "personal" ? "My Spots Tried" : "Group Spots Tried",
+      value: scopedSummary.spotCount,
+      detail: scopeLabel,
+      interactive: canShowPersonalStats,
+      attributes: scopeButtonAttributes
+    },
+    {
+      label: activeStatsScope === "personal" ? "My Avg Rating" : "Group Avg Rating",
+      value: scopedSummary.avg ? formatRating(scopedSummary.avg) : "0.00",
+      detail: scopeLabel,
+      interactive: canShowPersonalStats,
+      attributes: scopeButtonAttributes
+    },
+    {
+      label: "Top Right Now",
+      value: topSpot
+    },
+    {
+      label: "Most Wanted",
+      value: topWanted ? topWanted.burger.restaurant : "No hype yet",
+      detail: topWanted ? `#${wantedIndex + 1} of ${topWantedList.length} · ${topWanted.count} want${topWanted.count === 1 ? "" : "s"}` : "",
+      interactive: topWantedList.length > 1,
+      attributes: topWantedList.length > 1
+        ? `type="button" data-cycle-most-wanted data-wanted-count="${topWantedList.length}" aria-label="Show next most wanted burger"`
+        : ""
+    }
   ];
 
   els.statsGrid.innerHTML = stats
-    .map(([label, value]) => `
-      <article class="stat-card">
-        <span>${escapeHtml(label)}</span>
-        <strong>${escapeHtml(value)}</strong>
-      </article>
+    .map((stat) => `
+      <${stat.interactive ? "button" : "article"} class="stat-card ${stat.interactive ? "stat-button" : ""}" ${stat.attributes || ""}>
+        <span>${escapeHtml(stat.label)}</span>
+        <strong>${escapeHtml(stat.value)}</strong>
+        ${stat.detail ? `<small>${escapeHtml(stat.detail)}</small>` : ""}
+      </${stat.interactive ? "button" : "article"}>
     `)
     .join("");
 }
@@ -1177,9 +1237,14 @@ function renderFeed() {
               <span>${escapeHtml(review.burger.neighborhood)}</span>
               ${displayTags(review.burger).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
             </div>
-            ${canCurrentUserEditReview(review) && !review.photo ? `
+            ${canCurrentUserEditReview(review) ? `
               <div class="review-actions">
-                <button class="ghost-button compact-button" type="button" data-add-review-photo="${escapeAttr(review.id)}">Add Photo</button>
+                <button class="delete-review-button" type="button" data-delete-review="${escapeAttr(review.id)}" aria-label="Delete your review for ${escapeAttr(review.burger.restaurant)}">
+                  <span aria-hidden="true">🗑</span>
+                </button>
+                <button class="ghost-button compact-button" type="button" data-add-review-photo="${escapeAttr(review.id)}">
+                  ${review.photo ? "Replace Photo" : "Add Photo"}
+                </button>
               </div>
             ` : ""}
           </div>
@@ -1485,6 +1550,71 @@ function readPhoto(file) {
   });
 }
 
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error("Could not prepare photo for upload."));
+      }
+    }, type, quality);
+  });
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("This image format could not be read by the browser."));
+    };
+    image.src = url;
+  });
+}
+
+async function bitmapFromFile(file) {
+  if (window.createImageBitmap) {
+    try {
+      return await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {
+      return loadImageFromFile(file);
+    }
+  }
+  return loadImageFromFile(file);
+}
+
+async function prepareReviewPhotoFile(file) {
+  if (!file) return null;
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Choose an image file for your review photo.");
+  }
+
+  const bitmap = await bitmapFromFile(file);
+  const width = bitmap.width || bitmap.naturalWidth;
+  const height = bitmap.height || bitmap.naturalHeight;
+  if (!width || !height) throw new Error("Could not read the selected image.");
+
+  const scale = Math.min(1, reviewPhotoMaxDimension / Math.max(width, height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const context = canvas.getContext("2d");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  if (typeof bitmap.close === "function") bitmap.close();
+
+  const blob = await canvasToBlob(canvas, "image/jpeg", reviewPhotoJpegQuality);
+  return new File([blob], "burger-review-photo.jpg", {
+    type: "image/jpeg",
+    lastModified: Date.now()
+  });
+}
+
 function safeFileName(fileName = "burger-photo") {
   return fileName.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/^-|-$/g, "") || "burger-photo";
 }
@@ -1492,11 +1622,12 @@ function safeFileName(fileName = "burger-photo") {
 async function uploadSupabaseReviewPhoto(file, reviewId) {
   if (!file || !isSupabaseReady()) return "";
 
-  const extension = safeFileName(file.name).split(".").pop() || "jpg";
+  const preparedFile = await prepareReviewPhotoFile(file);
+  const extension = safeFileName(preparedFile.name).split(".").pop() || "jpg";
   const path = `${supabaseSession.user.id}/${currentEventId}/${reviewId}.${extension}`;
-  const { error } = await supabaseClient.storage.from(supabasePhotoBucket).upload(path, file, {
+  const { error } = await supabaseClient.storage.from(supabasePhotoBucket).upload(path, preparedFile, {
     cacheControl: "3600",
-    contentType: file.type || "image/jpeg",
+    contentType: preparedFile.type || "image/jpeg",
     upsert: true
   });
 
@@ -1504,7 +1635,50 @@ async function uploadSupabaseReviewPhoto(file, reviewId) {
   return path;
 }
 
-async function attachSupabaseReviewPhoto(reviewId, file) {
+async function deleteReview(reviewId) {
+  const account = getAccount();
+  if (!account) return;
+
+  const review = getReviews().find((entry) => entry.id === reviewId);
+  if (!review || !canCurrentUserEditReview(review)) {
+    showAppStatus("You can only delete reviews you posted.", true);
+    return;
+  }
+
+  if (!window.confirm(`Delete your review for ${review.burger.restaurant}?`)) return;
+
+  if (isSupabaseReady()) {
+    try {
+      const { error } = await supabaseClient
+        .from("reviews")
+        .delete()
+        .eq("id", reviewId)
+        .eq("profile_id", account.id);
+
+      if (error) throw error;
+
+      if (review.photoPath) {
+        await supabaseClient.storage.from(supabasePhotoBucket).remove([review.photoPath]);
+      }
+
+      await refreshSupabaseData();
+      renderAll();
+      showAppStatus("Review deleted.");
+    } catch (error) {
+      setAuthStatus(`Could not delete review: ${error.message}`);
+      showAppStatus(`Could not delete review: ${error.message}`, true);
+    }
+    return;
+  }
+
+  const allReviews = loadLocalReviews();
+  allReviews[currentEventId] = (allReviews[currentEventId] || []).filter((entry) => !(entry.id === reviewId && entry.profileId === account.id));
+  saveLocalReviews(allReviews);
+  renderAll();
+  showAppStatus("Review deleted.");
+}
+
+async function attachSupabaseReviewPhoto(reviewId, file, previousPhotoPath = "") {
   const photoPath = await uploadSupabaseReviewPhoto(file, reviewId);
   if (!photoPath) return "";
 
@@ -1515,22 +1689,27 @@ async function attachSupabaseReviewPhoto(reviewId, file) {
     .eq("profile_id", supabaseSession.user.id);
 
   if (error) throw error;
+  if (previousPhotoPath && previousPhotoPath !== photoPath) {
+    await supabaseClient.storage.from(supabasePhotoBucket).remove([previousPhotoPath]);
+  }
   return photoPath;
 }
 
 async function appendPhotoToReview(reviewId, file) {
   if (!reviewId || !file) return;
+  const currentReview = getReviews().find((entry) => entry.id === reviewId);
+  const replacingPhoto = Boolean(currentReview?.photo);
 
   if (isSupabaseReady()) {
     try {
-      showAppStatus("Uploading review photo...");
-      await attachSupabaseReviewPhoto(reviewId, file);
+      showAppStatus(replacingPhoto ? "Replacing review photo..." : "Uploading review photo...");
+      await attachSupabaseReviewPhoto(reviewId, file, currentReview?.photoPath || "");
       await refreshSupabaseData();
       renderAll();
-      showAppStatus("Photo added to your review.");
+      showAppStatus(replacingPhoto ? "Photo replaced on your review." : "Photo added to your review.");
     } catch (error) {
-      setAuthStatus(`Could not add photo: ${error.message}`);
-      showAppStatus(`Could not add photo: ${error.message}`, true);
+      setAuthStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`);
+      showAppStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`, true);
     }
     return;
   }
@@ -1546,7 +1725,7 @@ async function appendPhotoToReview(reviewId, file) {
   review.photo = await readPhoto(file);
   saveLocalReviews(allReviews);
   renderAll();
-  showAppStatus("Photo added to your review.");
+  showAppStatus(replacingPhoto ? "Photo replaced on your review." : "Photo added to your review.");
 }
 
 function openReviewComposer() {
@@ -1600,8 +1779,28 @@ els.controlsToggle.addEventListener("click", () => {
   renderControlsPanel();
 });
 
+els.statsGrid.addEventListener("click", (event) => {
+  const scopeButton = event.target.closest("[data-toggle-stats-scope]");
+  const wantedButton = event.target.closest("[data-cycle-most-wanted]");
+
+  if (scopeButton) {
+    statsScope = statsScope === "personal" ? "group" : "personal";
+    renderStats();
+    return;
+  }
+
+  if (wantedButton) {
+    const wantedCount = Number(wantedButton.dataset.wantedCount || 0);
+    if (wantedCount > 1) {
+      wantedStatIndex = (wantedStatIndex + 1) % wantedCount;
+      renderStats();
+    }
+  }
+});
+
 els.eventPicker.addEventListener("change", async (event) => {
   currentEventId = event.target.value;
+  wantedStatIndex = 0;
   resetFilters();
   await refreshSupabaseData();
   renderAll();
@@ -1782,6 +1981,7 @@ els.reviewGrid.addEventListener("click", (event) => {
   const friendButton = event.target.closest("[data-friend-filter]");
   const photoButton = event.target.closest("[data-photo-toggle]");
   const addPhotoButton = event.target.closest("[data-add-review-photo]");
+  const deleteReviewButton = event.target.closest("[data-delete-review]");
 
   if (friendButton) {
     filters.friend = friendButton.dataset.friendFilter;
@@ -1799,6 +1999,10 @@ els.reviewGrid.addEventListener("click", (event) => {
   if (addPhotoButton) {
     pendingPhotoReviewId = addPhotoButton.dataset.addReviewPhoto;
     reviewPhotoAppendInput.click();
+  }
+
+  if (deleteReviewButton) {
+    deleteReview(deleteReviewButton.dataset.deleteReview);
   }
 });
 
@@ -1890,6 +2094,7 @@ els.reviewForm.addEventListener("submit", async (event) => {
       let photoMessage = "";
       if (els.photoInput.files[0]) {
         try {
+          showAppStatus("Preparing review photo...");
           await attachSupabaseReviewPhoto(reviewId, els.photoInput.files[0]);
         } catch (photoError) {
           photoMessage = `Review saved, but the photo did not upload: ${photoError.message}`;
