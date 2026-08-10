@@ -68,6 +68,7 @@ const els = {
   scheduleNoteInput: $("#scheduleNoteInput"),
   scheduleList: $("#scheduleList"),
   dialog: $("#reviewDialog"),
+  reviewDialogTitle: $("#reviewDialogTitle"),
   openComposer: $("#openComposer"),
   closeComposer: $("#closeComposer"),
   reviewForm: $("#reviewForm"),
@@ -131,7 +132,7 @@ let remoteReviewsByEvent = {};
 let remoteWantsByEvent = {};
 let remoteHiddenByEvent = {};
 let appStatusTimer = 0;
-let pendingPhotoReviewId = "";
+let activeReviewEditId = "";
 let reviewSubmitting = false;
 let pendingReviewActions = new Set();
 let filters = {
@@ -286,6 +287,16 @@ function appendWaitTimeToNotes(notes, waitTime) {
   return `${trimmedNotes}${trimmedNotes ? "\n\n" : ""}Wait time: ${label}`;
 }
 
+function stripWaitTimeFallback(notes = "") {
+  return notes
+    .replace(/\n{0,2}Wait time: (Immediate \(0-5 minutes\)|Standard \(5-15 minutes\)|Long \(15-30 minutes\)|Very Long \(30\+ minutes\))\s*$/i, "")
+    .trim();
+}
+
+function notesWithWaitTimeFallback(notes, waitTime) {
+  return appendWaitTimeToNotes(stripWaitTimeFallback(notes), waitTime);
+}
+
 function loadJsonStore(key) {
   try {
     return JSON.parse(localStorage.getItem(key)) || {};
@@ -331,6 +342,20 @@ function saveWaitReport(burgerId, waitTime, note = "") {
     profileId: account.id,
     reportedAt: new Date().toISOString()
   };
+  saveJsonStore(waitReportStoreKey, store);
+  return true;
+}
+
+function deleteWaitReport(burgerId) {
+  const account = getAccount();
+  if (!account) return false;
+  const store = loadJsonStore(waitReportStoreKey);
+  if (!store[currentEventId]?.[account.id]?.[burgerId]) return false;
+
+  delete store[currentEventId][account.id][burgerId];
+  if (!Object.keys(store[currentEventId][account.id]).length) {
+    delete store[currentEventId][account.id];
+  }
   saveJsonStore(waitReportStoreKey, store);
   return true;
 }
@@ -1419,13 +1444,13 @@ function renderFeed() {
       const hasToggle = Boolean(review.photo && review.burger.restaurantPhoto);
       const placeholderArt = image?.src?.includes("restaurant-placeholder.svg");
       const deleteBusy = reviewActionBusy("delete", review.id);
-      const photoBusy = reviewActionBusy("photo", review.id);
-      const photoLabel = review.photo ? "Replace Photo" : "Add Photo";
+      const editBusy = reviewActionBusy("edit", review.id);
       const showingDescription = reviewTextViewByReview[review.id] === "description";
       const reviewCopy = showingDescription ? review.burger.description || "No restaurant description." : review.notes || "No notes.";
+      const imageCaption = image ? `${review.burger.restaurant} - ${review.burger.burger} (${image.source})` : "";
       return `
         <article class="review-card">
-          <div class="photo-frame ${image ? "" : "placeholder-photo"} ${placeholderArt ? "placeholder-art" : ""}">
+          <div class="photo-frame ${image ? "review-photo-button" : "placeholder-photo"} ${placeholderArt ? "placeholder-art" : ""}" ${image ? `role="button" tabindex="0" data-preview-review-photo="${escapeAttr(image.src)}" data-preview-alt="${escapeAttr(image.alt)}" data-preview-caption="${escapeAttr(imageCaption)}" aria-label="Open photo preview for ${escapeAttr(review.burger.restaurant)}"` : ""}>
             ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}">` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
             ${hasToggle ? `<button class="photo-toggle" type="button" data-photo-toggle="${escapeAttr(review.id)}" aria-label="Toggle restaurant photo">▣</button>` : ""}
             ${image ? `<span class="photo-source">${escapeHtml(image.source)}</span>` : ""}
@@ -1466,8 +1491,8 @@ function renderFeed() {
                 <button class="delete-review-button ${deleteBusy ? "is-loading" : ""}" type="button" data-delete-review="${escapeAttr(review.id)}" aria-label="Delete your review for ${escapeAttr(review.burger.restaurant)}" ${buttonBusyAttributes(deleteBusy)}>
                   ${loadingButtonContent(deleteBusy ? "Deleting..." : "Delete Post")}
                 </button>
-                <button class="ghost-button compact-button ${photoBusy ? "is-loading" : ""}" type="button" data-add-review-photo="${escapeAttr(review.id)}" ${buttonBusyAttributes(photoBusy)}>
-                  ${loadingButtonContent(photoBusy ? "Uploading..." : photoLabel)}
+                <button class="ghost-button compact-button ${editBusy ? "is-loading" : ""}" type="button" data-edit-review="${escapeAttr(review.id)}" ${buttonBusyAttributes(editBusy)}>
+                  ${loadingButtonContent(editBusy ? "Opening..." : "Update Review")}
                 </button>
               </div>
             ` : ""}
@@ -1623,18 +1648,21 @@ function renderBurgerList() {
               </div>
             </div>
             <p class="burger-description">${escapeHtml(burger.description || "")}</p>
-            <button class="availability-block availability-button" type="button" data-report-wait="${escapeAttr(burger.id)}" aria-label="Report wait time for ${escapeAttr(burger.restaurant)}">
+            <div class="availability-block availability-button" role="button" tabindex="0" data-report-wait="${escapeAttr(burger.id)}" aria-label="Report wait time for ${escapeAttr(burger.restaurant)}">
               <h4>Available</h4>
               <div class="availability-list">
                 ${availability}
               </div>
               ${waitReport ? `
-                <p class="wait-report">
-                  ${escapeHtml(waitReport.reporter)} reported ${escapeHtml(waitTimeLabel(waitReport.waitTime))}
-                  ${waitReport.note ? `<span>${escapeHtml(waitReport.note)}</span>` : ""}
-                </p>
+                <div class="wait-report">
+                  <span class="wait-report-copy">
+                    <b>${escapeHtml(waitReport.reporter)} reported ${escapeHtml(waitTimeLabel(waitReport.waitTime))}</b>
+                    ${waitReport.note ? `<span>${escapeHtml(waitReport.note)}</span>` : ""}
+                  </span>
+                  <button class="delete-wait-report" type="button" data-delete-wait-report="${escapeAttr(burger.id)}">Delete Time</button>
+                </div>
               ` : ""}
-            </button>
+            </div>
             <div class="tag-row">
               <span>${escapeHtml(burger.neighborhood)}</span>
               ${visibleTags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
@@ -1979,42 +2007,32 @@ async function attachSupabaseReviewPhoto(reviewId, file, previousPhotoPath = "")
   return photoPath;
 }
 
-async function appendPhotoToReview(reviewId, file) {
-  if (!reviewId || !file) return;
-  if (reviewActionBusy("photo", reviewId)) return;
+function setReviewFormMode(review = null) {
+  const isEditing = Boolean(review);
+  activeReviewEditId = review?.id || "";
+  els.reviewDialogTitle.textContent = isEditing ? "Update Review" : "Add a Review";
+  els.postReviewButton.dataset.loadingLabel = isEditing ? "Updating..." : "Posting...";
+  delete els.postReviewButton.dataset.defaultLabel;
+  const buttonLabel = els.postReviewButton.querySelector(".button-label");
+  if (buttonLabel) buttonLabel.textContent = isEditing ? "Update Review" : "Post Review";
 
-  const currentReview = getReviews().find((entry) => entry.id === reviewId);
-  const replacingPhoto = Boolean(currentReview?.photo);
-  setReviewActionBusy("photo", reviewId, true);
-
-  try {
-    if (isSupabaseReady()) {
-      showAppStatus(replacingPhoto ? "Replacing review photo..." : "Uploading review photo...");
-      await attachSupabaseReviewPhoto(reviewId, file, currentReview?.photoPath || "");
-      await refreshSupabaseData();
-      renderAll();
-      showAppStatus(replacingPhoto ? "Photo replaced on your review." : "Photo added to your review.");
-      return;
-    }
-
-    const account = getAccount();
-    const allReviews = loadLocalReviews();
-    const review = (allReviews[currentEventId] || []).find((entry) => entry.id === reviewId && entry.profileId === account?.id);
-    if (!review) {
-      showAppStatus("Could not find a local review to update.", true);
-      return;
-    }
-
-    review.photo = await readPhoto(file);
-    saveLocalReviews(allReviews);
-    renderAll();
-    showAppStatus(replacingPhoto ? "Photo replaced on your review." : "Photo added to your review.");
-  } catch (error) {
-    setAuthStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`);
-    showAppStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`, true);
-  } finally {
-    setReviewActionBusy("photo", reviewId, false);
+  if (isEditing) {
+    currentRating = Number(review.rating) || 0;
+    els.burgerSelect.value = review.burgerId;
+    els.ratingInput.value = String(currentRating);
+    els.waitTimeInput.value = review.waitTime || "";
+    els.reviewForm.elements.notes.value = stripWaitTimeFallback(review.notes || "");
+    els.photoInput.value = "";
+    renderStarInput();
+    setReviewStatus("");
+    return;
   }
+
+  els.reviewForm.reset();
+  currentRating = 5;
+  els.waitTimeInput.value = "";
+  renderStarInput();
+  setReviewStatus("");
 }
 
 function openReviewComposer() {
@@ -2024,8 +2042,27 @@ function openReviewComposer() {
     els.loginDialog.showModal();
     return;
   }
+  setReviewFormMode();
   els.reviewerInput.value = account.displayName;
-  setReviewStatus("");
+  els.dialog.showModal();
+}
+
+function openReviewEditor(reviewId) {
+  const account = getAccount();
+  if (!account) {
+    openReviewAfterLogin = true;
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const review = getReviews().find((entry) => entry.id === reviewId);
+  if (!review || !canCurrentUserEditReview(review)) {
+    showAppStatus("You can only update reviews you posted.", true);
+    return;
+  }
+
+  setReviewFormMode(review);
+  els.reviewerInput.value = account.displayName;
   els.dialog.showModal();
 }
 
@@ -2270,7 +2307,8 @@ els.starInput.addEventListener("click", (event) => {
 els.reviewGrid.addEventListener("click", (event) => {
   const friendButton = event.target.closest("[data-friend-filter]");
   const photoButton = event.target.closest("[data-photo-toggle]");
-  const addPhotoButton = event.target.closest("[data-add-review-photo]");
+  const previewPhotoButton = event.target.closest("[data-preview-review-photo]");
+  const editReviewButton = event.target.closest("[data-edit-review]");
   const deleteReviewButton = event.target.closest("[data-delete-review]");
   const copyToggleButton = event.target.closest("[data-review-copy-toggle]");
   const jumpBurgerButton = event.target.closest("[data-jump-burger]");
@@ -2286,6 +2324,16 @@ els.reviewGrid.addEventListener("click", (event) => {
     const reviewId = photoButton.dataset.photoToggle;
     photoViewByReview[reviewId] = photoViewByReview[reviewId] === "official" ? "friend" : "official";
     renderFeed();
+    return;
+  }
+
+  if (previewPhotoButton) {
+    openImageDialog({
+      src: previewPhotoButton.dataset.previewReviewPhoto,
+      alt: previewPhotoButton.dataset.previewAlt,
+      caption: previewPhotoButton.dataset.previewCaption
+    });
+    return;
   }
 
   if (copyToggleButton) {
@@ -2297,10 +2345,9 @@ els.reviewGrid.addEventListener("click", (event) => {
     jumpToBurger(jumpBurgerButton.dataset.jumpBurger);
   }
 
-  if (addPhotoButton) {
-    if (addPhotoButton.disabled) return;
-    pendingPhotoReviewId = addPhotoButton.dataset.addReviewPhoto;
-    reviewPhotoAppendInput.click();
+  if (editReviewButton) {
+    if (editReviewButton.disabled) return;
+    openReviewEditor(editReviewButton.dataset.editReview);
   }
 
   if (deleteReviewButton) {
@@ -2309,17 +2356,16 @@ els.reviewGrid.addEventListener("click", (event) => {
   }
 });
 
-const reviewPhotoAppendInput = document.createElement("input");
-reviewPhotoAppendInput.type = "file";
-reviewPhotoAppendInput.accept = "image/*";
-reviewPhotoAppendInput.hidden = true;
-document.body.append(reviewPhotoAppendInput);
-reviewPhotoAppendInput.addEventListener("change", async () => {
-  const file = reviewPhotoAppendInput.files?.[0];
-  const reviewId = pendingPhotoReviewId;
-  pendingPhotoReviewId = "";
-  reviewPhotoAppendInput.value = "";
-  await appendPhotoToReview(reviewId, file);
+els.reviewGrid.addEventListener("keydown", (event) => {
+  if (!["Enter", " "].includes(event.key)) return;
+  const previewPhotoButton = event.target.closest("[data-preview-review-photo]");
+  if (!previewPhotoButton || event.target.closest("button, a")) return;
+  event.preventDefault();
+  openImageDialog({
+    src: previewPhotoButton.dataset.previewReviewPhoto,
+    alt: previewPhotoButton.dataset.previewAlt,
+    caption: previewPhotoButton.dataset.previewCaption
+  });
 });
 
 els.burgerList.addEventListener("click", (event) => {
@@ -2327,12 +2373,19 @@ els.burgerList.addEventListener("click", (event) => {
   const hideButton = event.target.closest("[data-hide-burger]");
   const previewButton = event.target.closest("[data-preview-photo]");
   const waitButton = event.target.closest("[data-report-wait]");
+  const deleteWaitButton = event.target.closest("[data-delete-wait-report]");
   if (previewButton) {
     openImageDialog({
       src: previewButton.dataset.previewPhoto,
       alt: previewButton.dataset.previewAlt,
       caption: previewButton.dataset.previewCaption
     });
+    return;
+  }
+  if (deleteWaitButton) {
+    deleteWaitReport(deleteWaitButton.dataset.deleteWaitReport);
+    renderBurgerBoardState();
+    showAppStatus("Wait time report deleted.");
     return;
   }
   if (waitButton) {
@@ -2345,6 +2398,14 @@ els.burgerList.addEventListener("click", (event) => {
   if (hideButton) {
     hideBurger(hideButton.dataset.hideBurger);
   }
+});
+
+els.burgerList.addEventListener("keydown", (event) => {
+  if (!["Enter", " "].includes(event.key)) return;
+  const waitButton = event.target.closest("[data-report-wait]");
+  if (!waitButton || event.target.closest("button, a")) return;
+  event.preventDefault();
+  openWaitReportDialog(waitButton.dataset.reportWait);
 });
 
 els.hypeList.addEventListener("click", (event) => {
@@ -2432,47 +2493,81 @@ els.reviewForm.addEventListener("submit", async (event) => {
   setButtonLoading(els.postReviewButton, true, els.postReviewButton?.dataset.loadingLabel || "Posting...");
 
   const form = new FormData(els.reviewForm);
-  const reviewId = crypto.randomUUID();
+  const isEditing = Boolean(activeReviewEditId);
+  const reviewId = activeReviewEditId || crypto.randomUUID();
+  const existingReview = isEditing ? getReviews().find((entry) => entry.id === reviewId) : null;
   const reviewWaitTime = form.get("waitTime");
   const reviewNotes = form.get("notes").trim();
+  const selectedPhotoFile = els.photoInput.files[0];
 
   try {
+    if (isEditing) {
+      if (!existingReview || !canCurrentUserEditReview(existingReview)) {
+        throw new Error("You can only update reviews you posted.");
+      }
+      setReviewActionBusy("edit", reviewId, true);
+    }
+
     if (isSupabaseReady()) {
-      const reviewPayload = {
-        id: reviewId,
-        event_id: currentEventId,
-        food_item_id: form.get("burgerId"),
-        profile_id: account.id,
-        rating: Number(form.get("rating")),
-        notes: reviewNotes,
-        photo_path: null
-      };
-      if (reviewWaitTime && supabaseReviewWaitTimeSupported) {
-        reviewPayload.wait_time = reviewWaitTime;
+      let reviewPayload = isEditing
+        ? {
+            food_item_id: form.get("burgerId"),
+            rating: Number(form.get("rating")),
+            notes: reviewNotes,
+            updated_at: new Date().toISOString()
+          }
+        : {
+            id: reviewId,
+            event_id: currentEventId,
+            food_item_id: form.get("burgerId"),
+            profile_id: account.id,
+            rating: Number(form.get("rating")),
+            notes: reviewNotes,
+            photo_path: null
+          };
+      if (supabaseReviewWaitTimeSupported) {
+        reviewPayload.wait_time = reviewWaitTime || null;
+      } else if (reviewWaitTime) {
+        reviewPayload.notes = notesWithWaitTimeFallback(reviewNotes, reviewWaitTime);
       }
 
-      let { error } = await supabaseClient.from("reviews").insert(reviewPayload);
-      if (error && reviewPayload.wait_time && supabaseMissingColumnError(error, "wait_time")) {
+      let { error } = isEditing
+        ? await supabaseClient
+            .from("reviews")
+            .update(reviewPayload)
+            .eq("id", reviewId)
+            .eq("profile_id", account.id)
+        : await supabaseClient.from("reviews").insert(reviewPayload);
+
+      if (error && supabaseReviewWaitTimeSupported && supabaseMissingColumnError(error, "wait_time")) {
         supabaseReviewWaitTimeSupported = false;
+        reviewPayload = { ...reviewPayload };
         delete reviewPayload.wait_time;
-        reviewPayload.notes = appendWaitTimeToNotes(reviewNotes, reviewWaitTime);
-        ({ error } = await supabaseClient.from("reviews").insert(reviewPayload));
+        reviewPayload.notes = reviewWaitTime ? notesWithWaitTimeFallback(reviewNotes, reviewWaitTime) : stripWaitTimeFallback(reviewNotes);
+        ({ error } = isEditing
+          ? await supabaseClient
+              .from("reviews")
+              .update(reviewPayload)
+              .eq("id", reviewId)
+              .eq("profile_id", account.id)
+          : await supabaseClient.from("reviews").insert(reviewPayload));
       }
 
       if (error) throw error;
 
       let photoMessage = "";
-      if (els.photoInput.files[0]) {
+      if (selectedPhotoFile) {
         try {
           showAppStatus("Preparing review photo...");
-          await attachSupabaseReviewPhoto(reviewId, els.photoInput.files[0]);
+          await attachSupabaseReviewPhoto(reviewId, selectedPhotoFile, existingReview?.photoPath || "");
         } catch (photoError) {
-          photoMessage = `Review saved, but the photo did not upload: ${photoError.message}`;
+          photoMessage = `Review ${isEditing ? "updated" : "saved"}, but the photo did not upload: ${photoError.message}`;
         }
       }
 
       els.reviewForm.reset();
       currentRating = 5;
+      activeReviewEditId = "";
       renderStarInput();
       els.dialog.close();
       await refreshSupabaseData();
@@ -2481,37 +2576,55 @@ els.reviewForm.addEventListener("submit", async (event) => {
         setAuthStatus(photoMessage);
         showAppStatus(photoMessage, true);
       } else {
-        showAppStatus("Review posted.");
+        showAppStatus(isEditing ? "Review updated." : "Review posted.");
       }
       return;
     }
 
-    const photo = await readPhoto(els.photoInput.files[0]);
-    const review = {
-      id: reviewId,
-      burgerId: form.get("burgerId"),
-      reviewer: account.displayName,
-      profileId: account.id,
-      rating: Number(form.get("rating")),
-      notes: reviewNotes,
-      waitTime: reviewWaitTime,
-      photo,
-      createdAt: new Date().toISOString()
-    };
-
     const allReviews = loadLocalReviews();
-    allReviews[currentEventId] = [...(allReviews[currentEventId] || []), review];
+    if (isEditing) {
+      const review = (allReviews[currentEventId] || []).find((entry) => entry.id === reviewId && entry.profileId === account.id);
+      if (!review) throw new Error("Could not find a local review to update.");
+      review.burgerId = form.get("burgerId");
+      review.rating = Number(form.get("rating"));
+      review.notes = reviewNotes;
+      review.waitTime = reviewWaitTime;
+      review.updatedAt = new Date().toISOString();
+      if (selectedPhotoFile) {
+        review.photo = await readPhoto(selectedPhotoFile);
+      }
+    } else {
+      const photo = await readPhoto(selectedPhotoFile);
+      const review = {
+        id: reviewId,
+        burgerId: form.get("burgerId"),
+        reviewer: account.displayName,
+        profileId: account.id,
+        rating: Number(form.get("rating")),
+        notes: reviewNotes,
+        waitTime: reviewWaitTime,
+        photo,
+        createdAt: new Date().toISOString()
+      };
+      allReviews[currentEventId] = [...(allReviews[currentEventId] || []), review];
+    }
     saveLocalReviews(allReviews);
     els.reviewForm.reset();
     currentRating = 5;
+    activeReviewEditId = "";
     renderStarInput();
     els.dialog.close();
     renderAll();
+    showAppStatus(isEditing ? "Review updated." : "Review posted.");
   } catch (error) {
-    setReviewStatus(`Could not post review: ${error.message}`);
-    setAuthStatus(`Could not post review: ${error.message}`);
-    showAppStatus(`Could not post review: ${error.message}`, true);
+    const action = activeReviewEditId ? "update" : "post";
+    setReviewStatus(`Could not ${action} review: ${error.message}`);
+    setAuthStatus(`Could not ${action} review: ${error.message}`);
+    showAppStatus(`Could not ${action} review: ${error.message}`, true);
   } finally {
+    if (isEditing) {
+      setReviewActionBusy("edit", reviewId, false);
+    }
     reviewSubmitting = false;
     setButtonLoading(els.postReviewButton, false);
   }

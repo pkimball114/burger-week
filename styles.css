@@ -538,6 +538,16 @@ legend {
   overflow: hidden;
 }
 
+.review-photo-button {
+  cursor: zoom-in;
+}
+
+.review-photo-button:hover,
+.review-photo-button:focus-visible {
+  outline: 4px solid var(--bun);
+  outline-offset: 4px;
+}
+
 .photo-toggle {
   position: absolute;
   top: 10px;
@@ -553,6 +563,8 @@ legend {
   box-shadow: 3px 3px 0 var(--ink);
   font-size: 1rem;
   font-weight: 900;
+  cursor: pointer;
+  z-index: 2;
 }
 
 .photo-source {
@@ -944,6 +956,7 @@ legend {
   color: var(--ink);
   text-align: left;
   box-shadow: none;
+  cursor: pointer;
 }
 
 .availability-button:hover,
@@ -969,6 +982,8 @@ legend {
 
 .wait-report {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 3px;
   margin-top: 4px;
   padding-top: 8px;
@@ -977,8 +992,27 @@ legend {
   font-size: 0.86rem;
 }
 
-.wait-report span {
+.wait-report-copy,
+.wait-report-copy span {
+  display: grid;
+  gap: 3px;
   color: #6a5448;
+}
+
+.wait-report-copy b {
+  color: var(--ink);
+}
+
+.delete-wait-report {
+  min-height: 34px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--plate);
+  color: var(--ketchup-dark);
+  padding: 6px 9px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 0.76rem;
+  font-weight: 950;
 }
 
 .burger-actions {
@@ -1570,6 +1604,14 @@ legend {
 
   .burger-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .wait-report {
+    grid-template-columns: 1fr;
+  }
+
+  .delete-wait-report {
+    width: fit-content;
   }
 
   .score-pill {

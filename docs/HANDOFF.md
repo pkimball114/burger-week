@@ -34,14 +34,17 @@ Implemented UX:
 
 - Local login using `localStorage`.
 - Add Review flow requires login, then reopens the composer.
-- Reviews have friend name, burger selection, 0-5 rating in 0.25 increments, optional uploaded photo, and notes.
+- Reviews have friend name, burger selection, 0-5 rating in 0.25 increments, wait time, optional uploaded photo, and notes.
+- Logged-in users can update or delete their own review posts.
 - Friend Feed cards default to the user's uploaded photo when present.
 - If a restaurant-posted photo exists, a top-right image button toggles between friend photo and restaurant photo.
+- Friend Feed photos open the same preview modal used by Burger Board photos.
 - Friend names on cards are clickable and set the Friend filter.
 - Cards include quick links for maps and the EverOut listing.
 - Burger Board rows include a Want button for wishing for burgers.
 - The Burger Board includes a Hype List showing the most wished-for burgers from local want data.
 - Burger Board rows include a Hide button. Hidden burgers are removed from that user's Burger Board and Hype List.
+- Burger Board availability blocks support local per-user wait-time reports and deleting those reports.
 - The login/profile modal includes a Hidden Burgers list with Unhide buttons.
 - Filters: search, area, friend, minimum rating, and sort.
 - Views: Friend Feed, Burger Board, Map Preview, Schedule.
