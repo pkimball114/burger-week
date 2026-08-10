@@ -851,8 +851,7 @@ legend {
 }
 
 .hype-card:hover,
-.hype-card:focus-visible,
-.burger-row:focus {
+.hype-card:focus-visible {
   outline: 4px solid var(--bun);
   outline-offset: 4px;
 }
