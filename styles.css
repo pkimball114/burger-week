@@ -348,6 +348,43 @@ main {
   color: var(--ketchup-dark);
 }
 
+.back-to-section {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  border: var(--line);
+  border-radius: 999px;
+  background: var(--bun);
+  color: var(--ink);
+  padding: 8px 12px;
+  box-shadow: 4px 4px 0 var(--ink);
+  font-size: 0.84rem;
+  font-weight: 950;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.back-to-section.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.back-to-section[hidden] {
+  display: none;
+}
+
+.section-heading h2:focus {
+  outline: none;
+}
+
 .controls-band {
   position: relative;
   margin-top: 42px;

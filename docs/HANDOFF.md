@@ -49,6 +49,7 @@ Implemented UX:
 - Filters: search, area, friend, minimum rating, and sort.
 - Views: Friend Feed, Burger Board, Map Preview, Schedule.
 - Schedule combines manually planned stops with the logged-in user's own review timestamps as read-only visited stops.
+- Feed and Burger Board show a floating Top button after scrolling; it returns to the active section heading rather than the page hero.
 - Burger Board accommodates 124 burgers. If the editable event CSV has fewer rows, `app.js` pads generated placeholders to 124.
 
 Important limitation:

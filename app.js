@@ -67,6 +67,7 @@ const els = {
   scheduleStatusSelect: $("#scheduleStatusSelect"),
   scheduleNoteInput: $("#scheduleNoteInput"),
   scheduleList: $("#scheduleList"),
+  backToSection: $("#backToSection"),
   dialog: $("#reviewDialog"),
   reviewDialogTitle: $("#reviewDialogTitle"),
   openComposer: $("#openComposer"),
@@ -119,6 +120,7 @@ let pendingWaitBurgerId = "";
 let activeWaitBurgerId = "";
 let controlsCollapsed = false;
 let hypeCollapsed = false;
+let currentViewName = "feed";
 let statsScope = "personal";
 let wantedStatIndex = 0;
 let reviewTextViewByReview = {};
@@ -1854,15 +1856,52 @@ function renderAll() {
   renderMap();
   renderSchedule();
   renderStarInput();
+  updateBackToSectionButton();
 }
 
 function showView(viewName) {
+  currentViewName = viewName;
   els.tabs.forEach((tab) => {
     const isActive = tab.dataset.view === viewName;
     tab.classList.toggle("is-active", isActive);
     tab.setAttribute("aria-selected", String(isActive));
   });
   els.views.forEach((view) => view.classList.toggle("is-active", view.id === `${viewName}View`));
+  updateBackToSectionButton();
+}
+
+function currentBackToSectionTarget() {
+  if (currentViewName === "feed") return $("#feedTitle");
+  if (currentViewName === "burgers") return $("#burgersTitle");
+  return null;
+}
+
+function updateBackToSectionButton() {
+  if (!els.backToSection) return;
+
+  const target = currentBackToSectionTarget();
+  const shouldShow = Boolean(target && target.getBoundingClientRect().top < -80);
+  els.backToSection.hidden = !shouldShow;
+  els.backToSection.classList.toggle("is-visible", shouldShow);
+
+  if (target) {
+    els.backToSection.setAttribute("aria-label", `Back to ${target.textContent.trim()} heading`);
+  }
+}
+
+function scrollToCurrentSectionHeading() {
+  const target = currentBackToSectionTarget();
+  if (!target) return;
+
+  if (!target.hasAttribute("tabindex")) {
+    target.setAttribute("tabindex", "-1");
+  }
+
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.setTimeout(() => {
+    target.focus({ preventScroll: true });
+    updateBackToSectionButton();
+  }, 350);
 }
 
 function jumpToBurger(burgerId) {
@@ -2173,6 +2212,9 @@ els.sortSelect.addEventListener("change", (event) => {
 });
 
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+window.addEventListener("scroll", updateBackToSectionButton, { passive: true });
+window.addEventListener("resize", updateBackToSectionButton);
+els.backToSection?.addEventListener("click", scrollToCurrentSectionHeading);
 
 els.controlsToggle.addEventListener("click", () => {
   controlsCollapsed = !controlsCollapsed;
