@@ -234,14 +234,61 @@ h1 {
 }
 
 .primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--ketchup);
   color: white;
   padding: 11px 18px;
 }
 
 .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--plate);
   padding: 10px 14px;
+}
+
+.button-spinner {
+  display: none;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 3px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: button-spin 0.75s linear infinite;
+}
+
+.button-label {
+  display: inline-block;
+}
+
+.primary-action.is-loading,
+.ghost-button.is-loading,
+.delete-review-button.is-loading {
+  opacity: 0.84;
+}
+
+.primary-action.is-loading .button-spinner,
+.ghost-button.is-loading .button-spinner,
+.delete-review-button.is-loading .button-spinner {
+  display: inline-block;
+}
+
+.primary-action:disabled,
+.ghost-button:disabled,
+.delete-review-button:disabled {
+  cursor: wait;
+}
+
+@keyframes button-spin {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
 main {
@@ -665,8 +712,10 @@ legend {
 }
 
 .delete-review-button {
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 38px;
   border: var(--line);
   border-radius: 8px;

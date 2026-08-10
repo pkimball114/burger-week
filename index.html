@@ -162,7 +162,10 @@
         </label>
         <div class="dialog-actions">
           <button class="ghost-button" type="button" id="clearLocalData">Clear Local Reviews</button>
-          <button class="primary-action" type="submit">Post Review</button>
+          <button class="primary-action" type="submit" id="postReviewButton" data-loading-label="Posting...">
+            <span class="button-spinner" aria-hidden="true"></span>
+            <span class="button-label">Post Review</span>
+          </button>
         </div>
       </form>
     </dialog>

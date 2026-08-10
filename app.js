@@ -62,6 +62,7 @@ const els = {
   ratingInput: $("#ratingInput"),
   ratingOutput: $("#ratingOutput"),
   photoInput: $("#photoInput"),
+  postReviewButton: $("#postReviewButton"),
   clearLocalData: $("#clearLocalData"),
   authButton: $("#authButton"),
   loginDialog: $("#loginDialog"),
@@ -105,6 +106,8 @@ let remoteWantsByEvent = {};
 let remoteHiddenByEvent = {};
 let appStatusTimer = 0;
 let pendingPhotoReviewId = "";
+let reviewSubmitting = false;
+let pendingReviewActions = new Set();
 let filters = {
   search: "",
   neighborhood: "all",
@@ -188,6 +191,53 @@ function escapeHtml(value = "") {
 
 function escapeAttr(value = "") {
   return escapeHtml(value);
+}
+
+function loadingButtonContent(label) {
+  return `
+    <span class="button-spinner" aria-hidden="true"></span>
+    <span class="button-label">${escapeHtml(label)}</span>
+  `;
+}
+
+function buttonBusyAttributes(isBusy) {
+  return isBusy ? `disabled aria-busy="true"` : "";
+}
+
+function setButtonLoading(button, isLoading, loadingLabel = "") {
+  if (!button) return;
+
+  const label = button.querySelector(".button-label");
+  if (label && !button.dataset.defaultLabel) {
+    button.dataset.defaultLabel = label.textContent.trim();
+  }
+
+  button.disabled = isLoading;
+  button.classList.toggle("is-loading", isLoading);
+  button.setAttribute("aria-busy", String(isLoading));
+
+  if (label) {
+    label.textContent = isLoading && loadingLabel ? loadingLabel : button.dataset.defaultLabel || label.textContent;
+  }
+}
+
+function reviewActionKey(action, reviewId) {
+  return `${action}:${reviewId}`;
+}
+
+function reviewActionBusy(action, reviewId) {
+  return pendingReviewActions.has(reviewActionKey(action, reviewId));
+}
+
+function setReviewActionBusy(action, reviewId, isBusy) {
+  if (!reviewId) return;
+  const key = reviewActionKey(action, reviewId);
+  if (isBusy) {
+    pendingReviewActions.add(key);
+  } else {
+    pendingReviewActions.delete(key);
+  }
+  renderFeed();
 }
 
 function parseCsv(text) {
@@ -1206,6 +1256,9 @@ function renderFeed() {
       const image = reviewImage(review);
       const hasToggle = Boolean(review.photo && review.burger.restaurantPhoto);
       const placeholderArt = image?.src?.includes("restaurant-placeholder.svg");
+      const deleteBusy = reviewActionBusy("delete", review.id);
+      const photoBusy = reviewActionBusy("photo", review.id);
+      const photoLabel = review.photo ? "Replace Photo" : "Add Photo";
       return `
         <article class="review-card">
           <div class="photo-frame ${image ? "" : "placeholder-photo"} ${placeholderArt ? "placeholder-art" : ""}">
@@ -1239,11 +1292,11 @@ function renderFeed() {
             </div>
             ${canCurrentUserEditReview(review) ? `
               <div class="review-actions">
-                <button class="delete-review-button" type="button" data-delete-review="${escapeAttr(review.id)}" aria-label="Delete your review for ${escapeAttr(review.burger.restaurant)}">
-                  Delete Post
+                <button class="delete-review-button ${deleteBusy ? "is-loading" : ""}" type="button" data-delete-review="${escapeAttr(review.id)}" aria-label="Delete your review for ${escapeAttr(review.burger.restaurant)}" ${buttonBusyAttributes(deleteBusy)}>
+                  ${loadingButtonContent(deleteBusy ? "Deleting..." : "Delete Post")}
                 </button>
-                <button class="ghost-button compact-button" type="button" data-add-review-photo="${escapeAttr(review.id)}">
-                  ${review.photo ? "Replace Photo" : "Add Photo"}
+                <button class="ghost-button compact-button ${photoBusy ? "is-loading" : ""}" type="button" data-add-review-photo="${escapeAttr(review.id)}" ${buttonBusyAttributes(photoBusy)}>
+                  ${loadingButtonContent(photoBusy ? "Uploading..." : photoLabel)}
                 </button>
               </div>
             ` : ""}
@@ -1639,6 +1692,8 @@ async function uploadSupabaseReviewPhoto(file, reviewId, shouldReplace = false) 
 }
 
 async function deleteReview(reviewId) {
+  if (reviewActionBusy("delete", reviewId)) return;
+
   const account = getAccount();
   if (!account) return;
 
@@ -1650,8 +1705,10 @@ async function deleteReview(reviewId) {
 
   if (!window.confirm(`Delete your review for ${review.burger.restaurant}?`)) return;
 
-  if (isSupabaseReady()) {
-    try {
+  setReviewActionBusy("delete", reviewId, true);
+
+  try {
+    if (isSupabaseReady()) {
       const { error } = await supabaseClient
         .from("reviews")
         .delete()
@@ -1667,18 +1724,20 @@ async function deleteReview(reviewId) {
       await refreshSupabaseData();
       renderAll();
       showAppStatus("Review deleted.");
-    } catch (error) {
-      setAuthStatus(`Could not delete review: ${error.message}`);
-      showAppStatus(`Could not delete review: ${error.message}`, true);
+      return;
     }
-    return;
-  }
 
-  const allReviews = loadLocalReviews();
-  allReviews[currentEventId] = (allReviews[currentEventId] || []).filter((entry) => !(entry.id === reviewId && entry.profileId === account.id));
-  saveLocalReviews(allReviews);
-  renderAll();
-  showAppStatus("Review deleted.");
+    const allReviews = loadLocalReviews();
+    allReviews[currentEventId] = (allReviews[currentEventId] || []).filter((entry) => !(entry.id === reviewId && entry.profileId === account.id));
+    saveLocalReviews(allReviews);
+    renderAll();
+    showAppStatus("Review deleted.");
+  } catch (error) {
+    setAuthStatus(`Could not delete review: ${error.message}`);
+    showAppStatus(`Could not delete review: ${error.message}`, true);
+  } finally {
+    setReviewActionBusy("delete", reviewId, false);
+  }
 }
 
 async function attachSupabaseReviewPhoto(reviewId, file, previousPhotoPath = "") {
@@ -1700,35 +1759,40 @@ async function attachSupabaseReviewPhoto(reviewId, file, previousPhotoPath = "")
 
 async function appendPhotoToReview(reviewId, file) {
   if (!reviewId || !file) return;
+  if (reviewActionBusy("photo", reviewId)) return;
+
   const currentReview = getReviews().find((entry) => entry.id === reviewId);
   const replacingPhoto = Boolean(currentReview?.photo);
+  setReviewActionBusy("photo", reviewId, true);
 
-  if (isSupabaseReady()) {
-    try {
+  try {
+    if (isSupabaseReady()) {
       showAppStatus(replacingPhoto ? "Replacing review photo..." : "Uploading review photo...");
       await attachSupabaseReviewPhoto(reviewId, file, currentReview?.photoPath || "");
       await refreshSupabaseData();
       renderAll();
       showAppStatus(replacingPhoto ? "Photo replaced on your review." : "Photo added to your review.");
-    } catch (error) {
-      setAuthStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`);
-      showAppStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`, true);
+      return;
     }
-    return;
-  }
 
-  const account = getAccount();
-  const allReviews = loadLocalReviews();
-  const review = (allReviews[currentEventId] || []).find((entry) => entry.id === reviewId && entry.profileId === account?.id);
-  if (!review) {
-    showAppStatus("Could not find a local review to update.", true);
-    return;
-  }
+    const account = getAccount();
+    const allReviews = loadLocalReviews();
+    const review = (allReviews[currentEventId] || []).find((entry) => entry.id === reviewId && entry.profileId === account?.id);
+    if (!review) {
+      showAppStatus("Could not find a local review to update.", true);
+      return;
+    }
 
-  review.photo = await readPhoto(file);
-  saveLocalReviews(allReviews);
-  renderAll();
-  showAppStatus(replacingPhoto ? "Photo replaced on your review." : "Photo added to your review.");
+    review.photo = await readPhoto(file);
+    saveLocalReviews(allReviews);
+    renderAll();
+    showAppStatus(replacingPhoto ? "Photo replaced on your review." : "Photo added to your review.");
+  } catch (error) {
+    setAuthStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`);
+    showAppStatus(`Could not ${replacingPhoto ? "replace" : "add"} photo: ${error.message}`, true);
+  } finally {
+    setReviewActionBusy("photo", reviewId, false);
+  }
 }
 
 function openReviewComposer() {
@@ -2000,11 +2064,13 @@ els.reviewGrid.addEventListener("click", (event) => {
   }
 
   if (addPhotoButton) {
+    if (addPhotoButton.disabled) return;
     pendingPhotoReviewId = addPhotoButton.dataset.addReviewPhoto;
     reviewPhotoAppendInput.click();
   }
 
   if (deleteReviewButton) {
+    if (deleteReviewButton.disabled) return;
     deleteReview(deleteReviewButton.dataset.deleteReview);
   }
 });
@@ -2077,11 +2143,15 @@ els.reviewForm.addEventListener("submit", async (event) => {
     return;
   }
 
+  if (reviewSubmitting) return;
+  reviewSubmitting = true;
+  setButtonLoading(els.postReviewButton, true, els.postReviewButton?.dataset.loadingLabel || "Posting...");
+
   const form = new FormData(els.reviewForm);
   const reviewId = crypto.randomUUID();
 
-  if (isSupabaseReady()) {
-    try {
+  try {
+    if (isSupabaseReady()) {
       const { error } = await supabaseClient.from("reviews").insert({
         id: reviewId,
         event_id: currentEventId,
@@ -2116,34 +2186,37 @@ els.reviewForm.addEventListener("submit", async (event) => {
       } else {
         showAppStatus("Review posted.");
       }
-    } catch (error) {
-      setReviewStatus(`Could not post review: ${error.message}`);
-      setAuthStatus(`Could not post review: ${error.message}`);
-      showAppStatus(`Could not post review: ${error.message}`, true);
+      return;
     }
-    return;
+
+    const photo = await readPhoto(els.photoInput.files[0]);
+    const review = {
+      id: reviewId,
+      burgerId: form.get("burgerId"),
+      reviewer: account.displayName,
+      profileId: account.id,
+      rating: Number(form.get("rating")),
+      notes: form.get("notes").trim(),
+      photo,
+      createdAt: new Date().toISOString()
+    };
+
+    const allReviews = loadLocalReviews();
+    allReviews[currentEventId] = [...(allReviews[currentEventId] || []), review];
+    saveLocalReviews(allReviews);
+    els.reviewForm.reset();
+    currentRating = 5;
+    renderStarInput();
+    els.dialog.close();
+    renderAll();
+  } catch (error) {
+    setReviewStatus(`Could not post review: ${error.message}`);
+    setAuthStatus(`Could not post review: ${error.message}`);
+    showAppStatus(`Could not post review: ${error.message}`, true);
+  } finally {
+    reviewSubmitting = false;
+    setButtonLoading(els.postReviewButton, false);
   }
-
-  const photo = await readPhoto(els.photoInput.files[0]);
-  const review = {
-    id: reviewId,
-    burgerId: form.get("burgerId"),
-    reviewer: account.displayName,
-    profileId: account.id,
-    rating: Number(form.get("rating")),
-    notes: form.get("notes").trim(),
-    photo,
-    createdAt: new Date().toISOString()
-  };
-
-  const allReviews = loadLocalReviews();
-  allReviews[currentEventId] = [...(allReviews[currentEventId] || []), review];
-  saveLocalReviews(allReviews);
-  els.reviewForm.reset();
-  currentRating = 5;
-  renderStarInput();
-  els.dialog.close();
-  renderAll();
 });
 
 els.clearLocalData.addEventListener("click", () => {
