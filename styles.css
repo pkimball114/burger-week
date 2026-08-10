@@ -1203,6 +1203,7 @@ legend {
 
 .schedule-item time,
 .schedule-item span,
+.schedule-item small,
 .schedule-item p {
   color: #6a5448;
   font-weight: 800;
@@ -1210,8 +1211,13 @@ legend {
 
 .schedule-item strong,
 .schedule-item span,
+.schedule-item small,
 .schedule-item p {
   display: block;
+}
+
+.schedule-item small {
+  margin-top: 4px;
 }
 
 .schedule-item p {
@@ -1230,6 +1236,11 @@ legend {
 
 .schedule-status.is-visited {
   background: #e9fff9;
+}
+
+.schedule-source {
+  font-size: 0.78rem;
+  text-align: right;
 }
 
 .day-card {

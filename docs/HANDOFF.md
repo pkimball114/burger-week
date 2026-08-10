@@ -48,6 +48,7 @@ Implemented UX:
 - The login/profile modal includes a Hidden Burgers list with Unhide buttons.
 - Filters: search, area, friend, minimum rating, and sort.
 - Views: Friend Feed, Burger Board, Map Preview, Schedule.
+- Schedule combines manually planned stops with the logged-in user's own review timestamps as read-only visited stops.
 - Burger Board accommodates 124 burgers. If the editable event CSV has fewer rows, `app.js` pads generated placeholders to 124.
 
 Important limitation:

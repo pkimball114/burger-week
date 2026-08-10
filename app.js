@@ -386,6 +386,33 @@ function deleteScheduleEntry(entryId) {
   }
 }
 
+function dateTimePartsFromTimestamp(timestamp) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      date: "",
+      time: "",
+      sortKey: ""
+    };
+  }
+
+  const datePart = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+  const timePart = [
+    String(date.getHours()).padStart(2, "0"),
+    String(date.getMinutes()).padStart(2, "0")
+  ].join(":");
+
+  return {
+    date: datePart,
+    time: timePart,
+    sortKey: `${datePart}T${timePart}`
+  };
+}
+
 function supabaseMissingColumnError(error, columnName) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
   return error?.code === "PGRST204" || message.includes(columnName.toLowerCase());
@@ -1724,35 +1751,82 @@ function renderSchedule() {
     return;
   }
 
-  const entries = accountScheduleEntries()
-    .map((entry) => ({ ...entry, burger: getBurger(entry.burgerId) }))
-    .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+  const reviewEntries = getReviews()
+    .filter((review) => reviewBelongsToAccount(review, account))
+    .map((review) => {
+      const timestamp = dateTimePartsFromTimestamp(review.createdAt);
+      const reviewNote = stripWaitTimeFallback(review.notes || "");
+      return {
+        id: `review-${review.id}`,
+        eventId: currentEventId,
+        burgerId: review.burgerId,
+        profileId: account.id,
+        displayName: account.displayName,
+        date: timestamp.date,
+        time: timestamp.time,
+        sortKey: timestamp.sortKey || review.createdAt || "",
+        status: "reviewed",
+        source: "review",
+        rating: review.rating,
+        waitTime: review.waitTime,
+        note: reviewNote ? `Review posted: ${reviewNote}` : "",
+        burger: review.burger
+      };
+    })
+    .filter((entry) => entry.date && entry.time);
+
+  const reviewedKeys = new Set(reviewEntries.map((entry) => `${entry.burgerId}:${entry.date}`));
+  const manualEntries = accountScheduleEntries()
+    .filter((entry) => !(entry.status === "visited" && reviewedKeys.has(`${entry.burgerId}:${entry.date}`)))
+    .map((entry) => ({
+      ...entry,
+      sortKey: `${entry.date}T${entry.time}`,
+      source: "manual",
+      burger: getBurger(entry.burgerId)
+    }));
+  const entries = [...reviewEntries, ...manualEntries]
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
   if (!entries.length) {
     els.scheduleList.innerHTML = `
       <div class="empty-state">
         <h3>No stops scheduled yet.</h3>
-        <p>Add a place you visited or a place you want to reach later.</p>
+        <p>Add a place you want to reach later, or post a review to log a visit automatically.</p>
       </div>
     `;
     return;
   }
 
   els.scheduleList.innerHTML = entries
-    .map((entry) => `
-      <article class="schedule-item">
-        <time datetime="${escapeAttr(`${entry.date}T${entry.time}`)}">
-          ${escapeHtml(dayFormatter.format(new Date(`${entry.date}T12:00:00`)))} · ${escapeHtml(entry.time)}
-        </time>
-        <div>
-          <strong>${escapeHtml(entry.burger.restaurant)}</strong>
-          <span>${escapeHtml(entry.burger.burger)}</span>
-          ${entry.note ? `<p>${escapeHtml(entry.note)}</p>` : ""}
-        </div>
-        <span class="schedule-status ${entry.status === "visited" ? "is-visited" : ""}">${entry.status === "visited" ? "Visited" : "Planned"}</span>
-        <button class="ghost-button compact-button" type="button" data-delete-schedule="${escapeAttr(entry.id)}">Remove</button>
-      </article>
-    `)
+    .map((entry) => {
+      const statusLabel = entry.source === "review"
+        ? "Reviewed"
+        : entry.status === "visited" ? "Visited" : "Planned";
+      const statusClass = entry.source === "review" || entry.status === "visited" ? "is-visited" : "";
+      const reviewDetail = entry.source === "review"
+        ? [
+            `Rated ${formatRating(entry.rating)}`,
+            waitTimeLabel(entry.waitTime)
+          ].filter(Boolean).join(" · ")
+        : "";
+      return `
+        <article class="schedule-item">
+          <time datetime="${escapeAttr(`${entry.date}T${entry.time}`)}">
+            ${escapeHtml(dayFormatter.format(new Date(`${entry.date}T12:00:00`)))} · ${escapeHtml(entry.time)}
+          </time>
+          <div>
+            <strong>${escapeHtml(entry.burger.restaurant)}</strong>
+            <span>${escapeHtml(entry.burger.burger)}</span>
+            ${reviewDetail ? `<small>${escapeHtml(reviewDetail)}</small>` : ""}
+            ${entry.note ? `<p>${escapeHtml(entry.note)}</p>` : ""}
+          </div>
+          <span class="schedule-status ${statusClass}">${statusLabel}</span>
+          ${entry.source === "manual"
+            ? `<button class="ghost-button compact-button" type="button" data-delete-schedule="${escapeAttr(entry.id)}">Remove</button>`
+            : `<span class="schedule-source">From review</span>`}
+        </article>
+      `;
+    })
     .join("");
 }
 
