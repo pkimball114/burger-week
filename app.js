@@ -68,6 +68,8 @@ const els = {
   loginEmailInput: $("#loginEmailInput"),
   loginPasswordInput: $("#loginPasswordInput"),
   authStatus: $("#authStatus"),
+  appStatus: $("#appStatus"),
+  reviewStatus: $("#reviewStatus"),
   closeLogin: $("#closeLogin"),
   logoutButton: $("#logoutButton"),
   resetPasswordButton: $("#resetPasswordButton"),
@@ -97,6 +99,8 @@ let authStatusMessage = "";
 let remoteReviewsByEvent = {};
 let remoteWantsByEvent = {};
 let remoteHiddenByEvent = {};
+let appStatusTimer = 0;
+let pendingPhotoReviewId = "";
 let filters = {
   search: "",
   neighborhood: "all",
@@ -483,6 +487,25 @@ function setAuthStatus(message) {
   renderAuth();
 }
 
+function setReviewStatus(message = "") {
+  if (!els.reviewStatus) return;
+  els.reviewStatus.textContent = message;
+  els.reviewStatus.hidden = !message;
+}
+
+function showAppStatus(message, isError = false) {
+  if (!els.appStatus) return;
+  window.clearTimeout(appStatusTimer);
+  els.appStatus.textContent = message;
+  els.appStatus.hidden = false;
+  els.appStatus.classList.toggle("is-error", isError);
+  appStatusTimer = window.setTimeout(() => {
+    els.appStatus.hidden = true;
+    els.appStatus.textContent = "";
+    els.appStatus.classList.remove("is-error");
+  }, isError ? 9000 : 4500);
+}
+
 function authErrorMessage(prefix, error) {
   const message = error?.message || "Unknown error";
   const lowerMessage = message.toLowerCase();
@@ -636,6 +659,13 @@ async function refreshSupabaseData() {
   }
 }
 
+function renderBurgerBoardState() {
+  renderStats();
+  renderHiddenProfileList();
+  renderHypeList();
+  renderBurgerList();
+}
+
 async function initializeSupabase() {
   if (!hasUsableSupabaseConfig()) {
     if (supabaseConfig().authMode === "supabase") {
@@ -716,6 +746,15 @@ function accountHiddenIds() {
   return new Set(Object.keys(loadHidden()[currentEventId]?.[account.id] || {}));
 }
 
+function setRemoteHiddenEntry(eventId, burgerId, entry) {
+  remoteHiddenByEvent[eventId] ||= {};
+  if (entry) {
+    remoteHiddenByEvent[eventId][burgerId] = entry;
+  } else {
+    delete remoteHiddenByEvent[eventId][burgerId];
+  }
+}
+
 async function hideBurger(burgerId) {
   const account = getAccount();
   if (!account) {
@@ -726,22 +765,32 @@ async function hideBurger(burgerId) {
 
   const burger = getBurger(burgerId);
   if (isSupabaseReady()) {
+    const eventId = currentEventId;
+    const previousEntry = remoteHiddenByEvent[eventId]?.[burgerId] || null;
+    setRemoteHiddenEntry(eventId, burgerId, {
+      burgerId,
+      restaurant: burger.restaurant,
+      burger: burger.burger,
+      hiddenAt: new Date().toISOString()
+    });
+    renderBurgerBoardState();
+
     const { error } = await supabaseClient.from("hidden_food_items").insert({
-      event_id: currentEventId,
+      event_id: eventId,
       food_item_id: burgerId,
       profile_id: account.id
     });
 
     if (error && error.code !== "23505") {
+      setRemoteHiddenEntry(eventId, burgerId, previousEntry);
+      renderBurgerBoardState();
       setAuthStatus(`Could not hide burger: ${error.message}`);
+      showAppStatus(`Could not hide burger: ${error.message}`, true);
       return;
     }
 
     await refreshSupabaseData();
-    renderStats();
-    renderHiddenProfileList();
-    renderBurgerList();
-    renderHypeList();
+    renderBurgerBoardState();
     return;
   }
 
@@ -756,10 +805,7 @@ async function hideBurger(burgerId) {
   };
 
   saveHidden(hidden);
-  renderStats();
-  renderHiddenProfileList();
-  renderBurgerList();
-  renderHypeList();
+  renderBurgerBoardState();
 }
 
 async function unhideBurger(burgerId) {
@@ -767,23 +813,28 @@ async function unhideBurger(burgerId) {
   if (!account) return;
 
   if (isSupabaseReady()) {
+    const eventId = currentEventId;
+    const previousEntry = remoteHiddenByEvent[eventId]?.[burgerId] || null;
+    setRemoteHiddenEntry(eventId, burgerId, null);
+    renderBurgerBoardState();
+
     const { error } = await supabaseClient
       .from("hidden_food_items")
       .delete()
-      .eq("event_id", currentEventId)
+      .eq("event_id", eventId)
       .eq("food_item_id", burgerId)
       .eq("profile_id", account.id);
 
     if (error) {
+      setRemoteHiddenEntry(eventId, burgerId, previousEntry);
+      renderBurgerBoardState();
       setAuthStatus(`Could not unhide burger: ${error.message}`);
+      showAppStatus(`Could not unhide burger: ${error.message}`, true);
       return;
     }
 
     await refreshSupabaseData();
-    renderStats();
-    renderHiddenProfileList();
-    renderBurgerList();
-    renderHypeList();
+    renderBurgerBoardState();
     return;
   }
 
@@ -797,10 +848,7 @@ async function unhideBurger(burgerId) {
   }
 
   saveHidden(hidden);
-  renderStats();
-  renderHiddenProfileList();
-  renderBurgerList();
-  renderHypeList();
+  renderBurgerBoardState();
 }
 
 function loadWants() {
@@ -830,6 +878,20 @@ function accountWantsBurger(burgerId) {
   return Boolean(eventWants()[burgerId]?.[account.id]);
 }
 
+function setRemoteWantEntry(eventId, burgerId, account, entry) {
+  remoteWantsByEvent[eventId] ||= {};
+  remoteWantsByEvent[eventId][burgerId] ||= {};
+  if (entry) {
+    remoteWantsByEvent[eventId][burgerId][account.id] = entry;
+    return;
+  }
+
+  delete remoteWantsByEvent[eventId][burgerId][account.id];
+  if (!Object.keys(remoteWantsByEvent[eventId][burgerId]).length) {
+    delete remoteWantsByEvent[eventId][burgerId];
+  }
+}
+
 async function toggleWant(burgerId) {
   const account = getAccount();
   if (!account) {
@@ -839,29 +901,38 @@ async function toggleWant(burgerId) {
   }
 
   if (isSupabaseReady()) {
+    const eventId = currentEventId;
     const wanted = accountWantsBurger(burgerId);
+    const previousEntry = remoteWantsByEvent[eventId]?.[burgerId]?.[account.id] || null;
+    setRemoteWantEntry(eventId, burgerId, account, wanted ? null : {
+      displayName: account.displayName,
+      createdAt: new Date().toISOString()
+    });
+    renderBurgerBoardState();
+
     const { error } = wanted
       ? await supabaseClient
           .from("wants")
           .delete()
-          .eq("event_id", currentEventId)
+          .eq("event_id", eventId)
           .eq("food_item_id", burgerId)
           .eq("profile_id", account.id)
       : await supabaseClient.from("wants").insert({
-          event_id: currentEventId,
+          event_id: eventId,
           food_item_id: burgerId,
           profile_id: account.id
         });
 
     if (error && error.code !== "23505") {
+      setRemoteWantEntry(eventId, burgerId, account, previousEntry);
+      renderBurgerBoardState();
       setAuthStatus(`Could not update want: ${error.message}`);
+      showAppStatus(`Could not update want: ${error.message}`, true);
       return;
     }
 
     await refreshSupabaseData();
-    renderStats();
-    renderHypeList();
-    renderBurgerList();
+    renderBurgerBoardState();
     return;
   }
 
@@ -884,9 +955,7 @@ async function toggleWant(burgerId) {
   }
 
   saveWants(wants);
-  renderStats();
-  renderHypeList();
-  renderBurgerList();
+  renderBurgerBoardState();
 }
 
 function renderAuth() {
@@ -1054,6 +1123,11 @@ function reviewImage(review) {
   return null;
 }
 
+function canCurrentUserEditReview(review) {
+  const account = getAccount();
+  return Boolean(account && review.profileId === account.id);
+}
+
 function displayTags(burger) {
   return (burger.tags || []).filter((tag) => !["source-backed", "placeholder"].includes(tag.toLowerCase()));
 }
@@ -1103,6 +1177,11 @@ function renderFeed() {
               <span>${escapeHtml(review.burger.neighborhood)}</span>
               ${displayTags(review.burger).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
             </div>
+            ${canCurrentUserEditReview(review) && !review.photo ? `
+              <div class="review-actions">
+                <button class="ghost-button compact-button" type="button" data-add-review-photo="${escapeAttr(review.id)}">Add Photo</button>
+              </div>
+            ` : ""}
           </div>
         </article>
       `;
@@ -1418,11 +1497,56 @@ async function uploadSupabaseReviewPhoto(file, reviewId) {
   const { error } = await supabaseClient.storage.from(supabasePhotoBucket).upload(path, file, {
     cacheControl: "3600",
     contentType: file.type || "image/jpeg",
-    upsert: false
+    upsert: true
   });
 
   if (error) throw error;
   return path;
+}
+
+async function attachSupabaseReviewPhoto(reviewId, file) {
+  const photoPath = await uploadSupabaseReviewPhoto(file, reviewId);
+  if (!photoPath) return "";
+
+  const { error } = await supabaseClient
+    .from("reviews")
+    .update({ photo_path: photoPath, updated_at: new Date().toISOString() })
+    .eq("id", reviewId)
+    .eq("profile_id", supabaseSession.user.id);
+
+  if (error) throw error;
+  return photoPath;
+}
+
+async function appendPhotoToReview(reviewId, file) {
+  if (!reviewId || !file) return;
+
+  if (isSupabaseReady()) {
+    try {
+      showAppStatus("Uploading review photo...");
+      await attachSupabaseReviewPhoto(reviewId, file);
+      await refreshSupabaseData();
+      renderAll();
+      showAppStatus("Photo added to your review.");
+    } catch (error) {
+      setAuthStatus(`Could not add photo: ${error.message}`);
+      showAppStatus(`Could not add photo: ${error.message}`, true);
+    }
+    return;
+  }
+
+  const account = getAccount();
+  const allReviews = loadLocalReviews();
+  const review = (allReviews[currentEventId] || []).find((entry) => entry.id === reviewId && entry.profileId === account?.id);
+  if (!review) {
+    showAppStatus("Could not find a local review to update.", true);
+    return;
+  }
+
+  review.photo = await readPhoto(file);
+  saveLocalReviews(allReviews);
+  renderAll();
+  showAppStatus("Photo added to your review.");
 }
 
 function openReviewComposer() {
@@ -1433,6 +1557,7 @@ function openReviewComposer() {
     return;
   }
   els.reviewerInput.value = account.displayName;
+  setReviewStatus("");
   els.dialog.showModal();
 }
 
@@ -1656,6 +1781,7 @@ els.starInput.addEventListener("click", (event) => {
 els.reviewGrid.addEventListener("click", (event) => {
   const friendButton = event.target.closest("[data-friend-filter]");
   const photoButton = event.target.closest("[data-photo-toggle]");
+  const addPhotoButton = event.target.closest("[data-add-review-photo]");
 
   if (friendButton) {
     filters.friend = friendButton.dataset.friendFilter;
@@ -1669,6 +1795,24 @@ els.reviewGrid.addEventListener("click", (event) => {
     photoViewByReview[reviewId] = photoViewByReview[reviewId] === "official" ? "friend" : "official";
     renderFeed();
   }
+
+  if (addPhotoButton) {
+    pendingPhotoReviewId = addPhotoButton.dataset.addReviewPhoto;
+    reviewPhotoAppendInput.click();
+  }
+});
+
+const reviewPhotoAppendInput = document.createElement("input");
+reviewPhotoAppendInput.type = "file";
+reviewPhotoAppendInput.accept = "image/*";
+reviewPhotoAppendInput.hidden = true;
+document.body.append(reviewPhotoAppendInput);
+reviewPhotoAppendInput.addEventListener("change", async () => {
+  const file = reviewPhotoAppendInput.files?.[0];
+  const reviewId = pendingPhotoReviewId;
+  pendingPhotoReviewId = "";
+  reviewPhotoAppendInput.value = "";
+  await appendPhotoToReview(reviewId, file);
 });
 
 els.burgerList.addEventListener("click", (event) => {
@@ -1731,7 +1875,6 @@ els.reviewForm.addEventListener("submit", async (event) => {
 
   if (isSupabaseReady()) {
     try {
-      const photoPath = await uploadSupabaseReviewPhoto(els.photoInput.files[0], reviewId);
       const { error } = await supabaseClient.from("reviews").insert({
         id: reviewId,
         event_id: currentEventId,
@@ -1739,10 +1882,19 @@ els.reviewForm.addEventListener("submit", async (event) => {
         profile_id: account.id,
         rating: Number(form.get("rating")),
         notes: form.get("notes").trim(),
-        photo_path: photoPath || null
+        photo_path: null
       });
 
       if (error) throw error;
+
+      let photoMessage = "";
+      if (els.photoInput.files[0]) {
+        try {
+          await attachSupabaseReviewPhoto(reviewId, els.photoInput.files[0]);
+        } catch (photoError) {
+          photoMessage = `Review saved, but the photo did not upload: ${photoError.message}`;
+        }
+      }
 
       els.reviewForm.reset();
       currentRating = 5;
@@ -1750,8 +1902,16 @@ els.reviewForm.addEventListener("submit", async (event) => {
       els.dialog.close();
       await refreshSupabaseData();
       renderAll();
+      if (photoMessage) {
+        setAuthStatus(photoMessage);
+        showAppStatus(photoMessage, true);
+      } else {
+        showAppStatus("Review posted.");
+      }
     } catch (error) {
+      setReviewStatus(`Could not post review: ${error.message}`);
       setAuthStatus(`Could not post review: ${error.message}`);
+      showAppStatus(`Could not post review: ${error.message}`, true);
     }
     return;
   }

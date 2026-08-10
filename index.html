@@ -36,6 +36,17 @@
     </header>
 
     <main>
+      <section class="issue-banner" aria-label="Outstanding issues">
+        <strong>Outstanding issues</strong>
+        <ul>
+          <li>Map is under construction</li>
+          <li>Calendar is not fully populated</li>
+          <li>Reviews currently do not support images</li>
+        </ul>
+      </section>
+
+      <p class="app-status" id="appStatus" hidden></p>
+
       <section class="controls-band" id="controlsBand" aria-label="Review controls">
         <button class="controls-toggle" id="controlsToggle" type="button" aria-expanded="true" aria-controls="controlsContent" aria-label="Collapse stats and filters">
           <span aria-hidden="true">-</span>
@@ -144,6 +155,7 @@
           <span>Photo</span>
           <input id="photoInput" name="photo" type="file" accept="image/*">
         </label>
+        <p class="dialog-note review-status" id="reviewStatus" hidden></p>
         <label>
           <span>Notes</span>
           <textarea id="notesInput" name="notes" rows="4" placeholder="Sauce, texture, line length, would-order-again energy"></textarea>
