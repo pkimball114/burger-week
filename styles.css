@@ -579,12 +579,6 @@ legend {
   cursor: zoom-in;
 }
 
-.review-photo-button:hover,
-.review-photo-button:focus-visible {
-  outline: 4px solid var(--bun);
-  outline-offset: 4px;
-}
-
 .photo-toggle {
   position: absolute;
   top: 10px;
