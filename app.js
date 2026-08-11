@@ -1516,7 +1516,7 @@ function renderFeed() {
       const deleteBusy = reviewActionBusy("delete", review.id);
       const editBusy = reviewActionBusy("edit", review.id);
       const showingDescription = reviewTextViewByReview[review.id] === "description";
-      const reviewCopy = showingDescription ? review.burger.description || "No restaurant description." : review.notes || "No notes.";
+      const reviewCopy = showingDescription ? review.burger.description || "No restaurant description." : review.notes || "";
       const imageCaption = image ? `${review.burger.restaurant} - ${review.burger.burger} (${image.source})` : "";
       return `
         <article class="review-card">
