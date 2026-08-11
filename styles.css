@@ -446,7 +446,7 @@ main {
 
 .controls-toggle {
   position: absolute;
-  bottom: calc(100% - 1px);
+  bottom: calc(100% + 3px);
   right: 13px;
   z-index: 2;
   border-bottom: 0;
