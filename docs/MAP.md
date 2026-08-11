@@ -104,18 +104,19 @@ The script is single-threaded, caches provider responses in an ignored local cac
    - `destroyMap()` is probably unnecessary for this app; keep the instance and update markers.
 
 3. Reuse filtering:
-   - Extend `renderFilteredViews()` to call `renderMap()` or `syncMapMarkers()`.
-   - Use `burgerMatchesActiveFilters(burger, visitedIds)` so Search, Area, Open now, and Hide visited affect markers.
+   - `renderFilteredViews()` calls `renderMap()`.
+   - `burgerMatchesActiveFilters(burger, visitedIds)` keeps Search, Area, Open now, and Hide visited synced with markers.
    - Friend and Min rating should keep affecting Feed only unless a future design explicitly makes the Map review-aware.
 
 4. Build custom markers:
    - Use a burger-counter-styled `L.divIcon` marker with initials or a short count badge.
-   - Add marker states for wanted, reviewed-by-me, open-now, and hidden-filtered-out.
+   - Add richer marker states for wanted, reviewed-by-me, open-now, and active filter status.
    - Cluster only if 124 pins feels crowded after real coordinates land.
 
 5. Add detail popups:
-   - Create a shared `burgerDetailHtml(burger, options)` helper using Burger Board fields: restaurant, burger name, description, neighborhood, availability, wait report, rating summary, Want/Hide actions, maps link, EverOut link, and photo preview trigger.
-   - In the map popup, use compact tabs such as `Details`, `Reviews`, and `Plan`.
+   - Current map-local options can show hours, image, description, average rating, total visitors, and want count/rank.
+   - A later shared `burgerDetailHtml(burger, options)` helper can further align Burger Board rows and map popups.
+   - In a richer map popup, use compact tabs such as `Details`, `Reviews`, and `Plan`.
    - Include a `View on Board` button that switches to the Burger Board tab and focuses `#burger-row-<id>`.
 
 6. Preserve graceful fallback:

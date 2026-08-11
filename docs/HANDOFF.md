@@ -159,14 +159,14 @@ Recent browser verification confirmed:
 - Hidden burgers are currently local-only and should become private per-user backend data when Supabase is connected.
 - `data/burger-week-2026.csv` currently has 124 Burger Week 2026 rows and should be treated as the source of truth unless the user provides a newer source file or asks for a correction.
 - The CSV has address, latitude/longitude, and maps URL coverage for all 124 rows.
-- The Map view uses Leaflet with all 124 CSV coordinates. Popups and filter-linked marker states are the next map work; see `docs/MAP.md`.
+- The Map view uses Leaflet with all 124 CSV coordinates. Open now, Hide visited, search, and area filters update marker visibility, and map-local detail checkboxes customize popup content; see `docs/MAP.md`.
 
 ## Best Next Tasks
 
 Highest value next steps:
 
-1. Add customizable Leaflet marker states and popups that reuse Burger Board details.
-2. Connect active filters such as Open now and Hide visited to Map marker visibility.
+1. Add richer Leaflet marker states for wanted, reviewed-by-me, open-now, and active filter status.
+2. Consider marker clustering or route-planning helpers if the 124 pins feel crowded.
 3. Connect Supabase Auth and shared reviews/photos.
 4. Improve the rating control UX. Twenty-one buttons works, but a slider plus numeric stepper may feel better on mobile.
 5. Add edit/delete review actions for the logged-in user's reviews.

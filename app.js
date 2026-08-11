@@ -63,6 +63,7 @@ const els = {
   resultCount: $("#resultCount"),
   mapPins: $("#mapPins"),
   mapList: $("#mapList"),
+  mapPopupOptions: $$("[data-map-popup-option]"),
   scheduleForm: $("#scheduleForm"),
   scheduleBurgerSelect: $("#scheduleBurgerSelect"),
   scheduleDateInput: $("#scheduleDateInput"),
@@ -151,6 +152,14 @@ let feedbackSubmitting = false;
 let pendingReviewActions = new Set();
 let burgerMap = null;
 let burgerMapMarkers = null;
+let mapPopupOptions = {
+  hours: true,
+  image: false,
+  description: true,
+  avgRating: true,
+  totalVisitors: true,
+  mostWanted: true
+};
 let filters = {
   search: "",
   neighborhood: "all",
@@ -1005,6 +1014,7 @@ function renderBurgerBoardState() {
   renderHiddenProfileList();
   renderHypeList();
   renderBurgerList();
+  renderMap();
 }
 
 async function initializeSupabase() {
@@ -1657,6 +1667,32 @@ function burgerReviewStats(burgerId) {
   return { count: reviews.length, avg };
 }
 
+function burgerVisitorCount(burgerId) {
+  const reviewers = new Set(
+    getReviews()
+      .filter((review) => review.burgerId === burgerId)
+      .map((review) => review.profileId || review.reviewer)
+      .filter(Boolean)
+  );
+  return reviewers.size;
+}
+
+function wantedSummaryForBurger(burgerId) {
+  const ranked = getEvent().burgers
+    .map((burger) => ({
+      burgerId: burger.id,
+      restaurant: burger.restaurant,
+      count: burgerWantEntries(burger.id).length
+    }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || a.restaurant.localeCompare(b.restaurant));
+  const index = ranked.findIndex((item) => item.burgerId === burgerId);
+  return {
+    count: burgerWantEntries(burgerId).length,
+    rank: index >= 0 ? index + 1 : 0
+  };
+}
+
 function mostWantedBurgers(limit = 5) {
   const hiddenIds = accountHiddenIds();
   return getEvent().burgers
@@ -1852,27 +1888,76 @@ function renderBurgerList() {
 
 function renderMap() {
   const event = getEvent();
-  const mappedBurgers = event.burgers.filter((burger) => burger.coordinates);
+  const visitedIds = personalVisitedBurgerIds();
+  const mappedBurgers = event.burgers
+    .filter((burger) => burger.coordinates)
+    .filter((burger) => burgerMatchesActiveFilters(burger, visitedIds));
 
   renderLeafletMap(mappedBurgers);
 
-  els.mapList.innerHTML = event.burgers
+  if (!mappedBurgers.length) {
+    els.mapList.innerHTML = `
+      <div class="empty-state">
+        <h3>No map locations match.</h3>
+        <p>Try clearing Open now, Hide visited, search, or area filters.</p>
+      </div>
+    `;
+    return;
+  }
+
+  els.mapList.innerHTML = mappedBurgers
     .map((burger) => `
       <article>
         <strong>${escapeHtml(burger.restaurant)}</strong>
         <span>${escapeHtml(burger.neighborhood)}</span>
-        ${burger.coordinates ? "" : `<small>Needs coordinates</small>`}
       </article>
     `)
     .join("");
 }
 
 function mapPopupHtml(burger) {
+  const stats = burgerReviewStats(burger.id);
+  const visitorCount = burgerVisitorCount(burger.id);
+  const wanted = wantedSummaryForBurger(burger.id);
+  const placeholderArt = burger.restaurantPhoto?.includes("restaurant-placeholder.svg");
+  const image = mapPopupOptions.image && burger.restaurantPhoto
+    ? `
+      <div class="map-popup-image ${placeholderArt ? "placeholder-art" : ""}">
+        <img src="${escapeAttr(burger.restaurantPhoto)}" alt="${escapeAttr(burger.photoAlt || `${burger.restaurant} burger photo`)}">
+      </div>
+    `
+    : "";
+  const hours = mapPopupOptions.hours
+    ? `
+      <div class="map-popup-section">
+        <b>Hours</b>
+        <span>${escapeHtml(burger.hours || "Hours TBD")}</span>
+      </div>
+    `
+    : "";
+  const description = mapPopupOptions.description && burger.description
+    ? `<p>${escapeHtml(burger.description)}</p>`
+    : "";
+  const avgRating = mapPopupOptions.avgRating
+    ? `<span><b>Avg</b> ${stats.count ? formatRating(stats.avg) : "No ratings yet"}</span>`
+    : "";
+  const totalVisitors = mapPopupOptions.totalVisitors
+    ? `<span><b>Visitors</b> ${visitorCount}</span>`
+    : "";
+  const mostWanted = mapPopupOptions.mostWanted
+    ? `<span><b>Wanted</b> ${wanted.count}${wanted.rank ? ` (#${wanted.rank})` : ""}</span>`
+    : "";
+  const metrics = [avgRating, totalVisitors, mostWanted].filter(Boolean).join("");
+
   return `
     <article class="map-popup">
+      ${image}
       <strong>${escapeHtml(burger.restaurant)}</strong>
       <span>${escapeHtml(burger.burger)}</span>
       <small>${escapeHtml(burger.neighborhood)}</small>
+      ${description}
+      ${hours}
+      ${metrics ? `<div class="map-popup-metrics">${metrics}</div>` : ""}
       <a href="${escapeAttr(burger.mapsUrl)}" target="_blank" rel="noreferrer">Open in Maps</a>
     </article>
   `;
@@ -2390,6 +2475,7 @@ function resetFilters() {
 function renderFilteredViews() {
   renderFeed();
   renderBurgerList();
+  renderMap();
 }
 
 els.searchInput.addEventListener("input", (event) => {
@@ -2426,6 +2512,11 @@ els.hideVisitedFilter?.addEventListener("change", (event) => {
   filters.hideVisited = event.target.checked;
   renderFilteredViews();
 });
+
+els.mapPopupOptions.forEach((input) => input.addEventListener("change", (event) => {
+  mapPopupOptions[event.target.dataset.mapPopupOption] = event.target.checked;
+  renderMap();
+}));
 
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 window.addEventListener("scroll", updateBackToSectionButton, { passive: true });
