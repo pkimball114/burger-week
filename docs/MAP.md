@@ -116,7 +116,7 @@ The script is single-threaded, caches provider responses in an ignored local cac
 5. Add detail popups:
    - Current map-local options can show hours, image, description, average rating, total visitors, and want count/rank.
    - Popups are capped and scrollable, with Leaflet auto-pan disabled so opening a larger detail bubble does not shove the map underneath it.
-   - A full-screen map mode gives users more room to pan, zoom, and inspect dense marker clusters.
+   - A floating top-right map icon opens full-screen mode, hiding Map Details controls so users have more room to pan, zoom, and inspect dense marker clusters.
    - A later shared `burgerDetailHtml(burger, options)` helper can further align Burger Board rows and map popups.
    - In a richer map popup, use compact tabs such as `Details`, `Reviews`, and `Plan`.
    - Include a `View on Board` button that switches to the Burger Board tab and focuses `#burger-row-<id>`.

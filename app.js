@@ -2039,7 +2039,6 @@ function setMapFullscreen(isFullscreen) {
   $("#mapView")?.classList.toggle("is-map-fullscreen", mapFullscreen);
   document.body.classList.toggle("map-fullscreen-active", mapFullscreen);
   if (els.mapFullscreenToggle) {
-    els.mapFullscreenToggle.textContent = mapFullscreen ? "Exit Full Screen" : "Full Screen Map";
     els.mapFullscreenToggle.setAttribute("aria-pressed", String(mapFullscreen));
     els.mapFullscreenToggle.setAttribute("aria-label", mapFullscreen ? "Exit full screen map" : "Open full screen map");
   }
