@@ -70,7 +70,8 @@ button {
 
 .topbar {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   gap: 16px;
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
@@ -78,12 +79,8 @@ button {
 }
 
 .topbar-brand-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  display: contents;
   min-width: 0;
-  width: 100%;
 }
 
 .brand {
@@ -131,6 +128,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  grid-column: 2;
+  grid-row: 1;
   gap: 10px;
   min-width: 0;
   width: 100%;
@@ -161,6 +160,8 @@ button {
 }
 
 .feedback-button {
+  grid-column: 3;
+  grid-row: 1;
   width: 48px;
   min-width: 48px;
   padding: 8px;
@@ -1680,12 +1681,23 @@ legend {
   }
 
   .topbar {
+    grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .topbar-brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
   }
 
   .topbar-actions {
     display: grid;
     grid-template-columns: 1fr;
+    grid-column: auto;
+    grid-row: auto;
     width: 100%;
   }
 
