@@ -8,6 +8,8 @@ Use Leaflet first, backed by either OpenStreetMap raster tiles for early testing
 
 Leaflet is the smallest fit for this app: one CSS file, one JS file, simple custom HTML markers, mobile-friendly popups, and no build step. It can hide/show markers from the same filtered burger list already used by the Burger Board. If the map later needs vector styling, clustering at much larger scale, or richer animations, MapLibre GL JS is the best upgrade path.
 
+Current implementation note: Leaflet `1.9.4` is vendored under `assets/vendor/leaflet/` so the static app does not depend on a CDN for the map library itself. The first-pass basemap uses OpenStreetMap raster tiles at runtime.
+
 ## Free Options
 
 ### Leaflet with OpenStreetMap tiles
@@ -47,7 +49,7 @@ Leaflet is the smallest fit for this app: one CSS file, one JS file, simple cust
 
 ## Data Prerequisites
 
-1. Fill `latitude` and `longitude` for all 124 CSV rows.
+1. Keep `latitude` and `longitude` filled for all 124 CSV rows.
 2. Keep `maps_url` as the external deep link used by quick links.
 3. Add no duplicate map data file unless a later provider requires a generated artifact.
 4. Validate coordinates before wiring the real map: Portland-area rows should generally fall near latitude `45.3` to `45.7` and longitude `-123.1` to `-122.3`, with wider bounds for Vancouver, Beaverton, Lake Oswego, and Oregon City.
@@ -57,6 +59,37 @@ Geocoding options:
 - Manual lookup is safest for 124 rows because it lets us catch venue-specific address errors.
 - Nominatim can be used deliberately for a small one-time pass, but it must respect the public usage policy: at most one request per second, single-threaded, identifying User-Agent or Referer, attribution, and local caching of results.
 - Geoapify is likely the cleaner free geocoding path because the same account can supply map tiles and geocoding with clearer daily quotas.
+
+This repo includes `scripts/geocode-burger-week.py` to populate missing `latitude` and `longitude` values without changing other CSV fields. It supports:
+
+- Geoapify, preferred when `GEOAPIFY_API_KEY` is available.
+- Nominatim, for a deliberate one-time no-key batch that obeys the OpenStreetMap usage policy.
+
+Dry run with Geoapify:
+
+```bash
+GEOAPIFY_API_KEY=your-key python3 scripts/geocode-burger-week.py --provider geoapify
+```
+
+Write coordinates with Geoapify:
+
+```bash
+GEOAPIFY_API_KEY=your-key python3 scripts/geocode-burger-week.py --provider geoapify --write
+```
+
+No-key Nominatim dry run:
+
+```bash
+python3 scripts/geocode-burger-week.py --provider nominatim --user-agent "BurgerWeekGeocoder/1.0 (+your-contact-url-or-email)"
+```
+
+No-key Nominatim write:
+
+```bash
+python3 scripts/geocode-burger-week.py --provider nominatim --user-agent "BurgerWeekGeocoder/1.0 (+your-contact-url-or-email)" --write
+```
+
+The script is single-threaded, caches provider responses in an ignored local cache file, skips rows that already have coordinates unless `--overwrite` is passed, and rejects obvious out-of-region results.
 
 ## Implementation Steps
 
@@ -98,12 +131,10 @@ Geocoding options:
 
 ## Suggested First Code Pass
 
-The first production-minded pass should be Leaflet plus OpenStreetMap or Geoapify tiles, gated by graceful fallback:
+The first production-minded map UI pass should be Leaflet plus OpenStreetMap or Geoapify tiles, gated by graceful fallback:
 
-1. Fill and validate coordinates in the CSV.
-2. Add Leaflet from a pinned CDN URL in `index.html`.
-3. Replace the schematic `.portland-map` contents with a real map container.
-4. Add `initMap()` and `syncMapMarkers()` in `app.js`.
-5. Reuse `burgerMatchesActiveFilters()` for marker visibility.
-6. Move Burger Board card summary markup into a shared helper so popups and rows stay consistent.
-7. Bump `sw.js` cache only when deploying the changed app shell/code/styles/config/CSV.
+1. Reuse the vendored Leaflet assets from `assets/vendor/leaflet/`.
+2. Reuse `burgerMatchesActiveFilters()` for marker visibility.
+3. Move Burger Board card summary markup into a shared helper so popups and rows stay consistent.
+4. Add marker states for wanted, reviewed-by-me, open-now, and active filter status.
+5. Bump `sw.js` cache only when deploying the changed app shell/code/styles/config/CSV/vendor assets.

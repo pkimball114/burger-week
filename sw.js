@@ -1,4 +1,4 @@
-const cacheName = "burger-week-v39";
+const cacheName = "burger-week-v43";
 const assets = [
   "./",
   "./index.html",
@@ -8,6 +8,13 @@ const assets = [
   "./config/supabase.js",
   "./assets/icon.svg",
   "./assets/burger-counter-hero.png",
+  "./assets/vendor/leaflet/leaflet.css",
+  "./assets/vendor/leaflet/leaflet.js",
+  "./assets/vendor/leaflet/images/layers.png",
+  "./assets/vendor/leaflet/images/layers-2x.png",
+  "./assets/vendor/leaflet/images/marker-icon.png",
+  "./assets/vendor/leaflet/images/marker-icon-2x.png",
+  "./assets/vendor/leaflet/images/marker-shadow.png",
   "./data/burger-week-2026.csv",
   "./data/photos/restaurant-placeholder.svg"
 ];

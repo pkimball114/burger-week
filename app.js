@@ -149,6 +149,8 @@ let activeReviewEditId = "";
 let reviewSubmitting = false;
 let feedbackSubmitting = false;
 let pendingReviewActions = new Set();
+let burgerMap = null;
+let burgerMapMarkers = null;
 let filters = {
   search: "",
   neighborhood: "all",
@@ -647,6 +649,13 @@ function coordinateToMapPoint(latitude, longitude, fallbackIndex) {
   return { x: 15 + ((fallbackIndex * 13) % 72), y: 12 + ((fallbackIndex * 19) % 76) };
 }
 
+function parseCoordinates(latitude, longitude) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
 function padBurgerList(burgers, targetCount, dates, sourceUrl) {
   if (burgers.length >= targetCount) return burgers;
   const neighborhoods = ["Southeast", "Northeast", "North Portland", "Downtown", "Northwest", "Southwest", "Glendoveer"];
@@ -675,6 +684,7 @@ function padBurgerList(burgers, targetCount, dates, sourceUrl) {
       photoAlt: "Restaurant posted burger photo placeholder",
       mapsUrl: `https://maps.apple.com/?q=${encodeURIComponent(`${restaurant} Portland OR`)}`,
       everoutUrl: sourceUrl,
+      coordinates: null,
       map: coordinateToMapPoint("", "", number)
     };
   });
@@ -712,6 +722,7 @@ async function loadEvents() {
             photoAlt: `${row.restaurant || "Restaurant"} burger photo`,
             mapsUrl: row.maps_url || `https://maps.apple.com/?q=${encodeURIComponent(`${row.restaurant || "Burger Week"} ${row.address || "Portland, OR"}`)}`,
             everoutUrl: row.everout_url || sourceUrl,
+            coordinates: parseCoordinates(row.latitude, row.longitude),
             map: coordinateToMapPoint(row.latitude, row.longitude, index)
           };
         });
@@ -1841,23 +1852,90 @@ function renderBurgerList() {
 
 function renderMap() {
   const event = getEvent();
-  els.mapPins.innerHTML = `
-    <span class="river" aria-hidden="true"></span>
-    ${event.burgers.map((burger) => `
-      <a class="pin" style="left:${burger.map.x}%;top:${burger.map.y}%;" href="${escapeAttr(burger.mapsUrl)}" target="_blank" rel="noreferrer" aria-label="${escapeAttr(burger.restaurant)} map link">
-        ${escapeHtml(burger.restaurant.charAt(0))}
-      </a>
-    `).join("")}
-  `;
+  const mappedBurgers = event.burgers.filter((burger) => burger.coordinates);
+
+  renderLeafletMap(mappedBurgers);
+
   els.mapList.innerHTML = event.burgers
-    .slice(0, 24)
     .map((burger) => `
       <article>
         <strong>${escapeHtml(burger.restaurant)}</strong>
         <span>${escapeHtml(burger.neighborhood)}</span>
+        ${burger.coordinates ? "" : `<small>Needs coordinates</small>`}
       </article>
     `)
     .join("");
+}
+
+function mapPopupHtml(burger) {
+  return `
+    <article class="map-popup">
+      <strong>${escapeHtml(burger.restaurant)}</strong>
+      <span>${escapeHtml(burger.burger)}</span>
+      <small>${escapeHtml(burger.neighborhood)}</small>
+      <a href="${escapeAttr(burger.mapsUrl)}" target="_blank" rel="noreferrer">Open in Maps</a>
+    </article>
+  `;
+}
+
+function createMapMarkerIcon(burger) {
+  const initial = escapeHtml((burger.restaurant || "?").trim().charAt(0).toUpperCase() || "?");
+  return L.divIcon({
+    className: "burger-map-marker",
+    html: `<span>${initial}</span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -18]
+  });
+}
+
+function renderLeafletMap(mappedBurgers) {
+  if (!els.mapPins) return;
+  if (currentViewName !== "map") return;
+
+  if (!window.L) {
+    els.mapPins.innerHTML = `
+      <div class="map-fallback">
+        <strong>Map unavailable</strong>
+        <span>Leaflet did not load. The location list is still available.</span>
+      </div>
+    `;
+    return;
+  }
+
+  if (!burgerMap) {
+    els.mapPins.innerHTML = "";
+    burgerMap = L.map(els.mapPins, {
+      scrollWheelZoom: false
+    });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(burgerMap);
+    burgerMapMarkers = L.layerGroup().addTo(burgerMap);
+  }
+
+  burgerMapMarkers.clearLayers();
+
+  const bounds = [];
+  mappedBurgers.forEach((burger) => {
+    const latLng = [burger.coordinates.lat, burger.coordinates.lng];
+    bounds.push(latLng);
+    L.marker(latLng, {
+      title: burger.restaurant,
+      icon: createMapMarkerIcon(burger)
+    })
+      .bindPopup(mapPopupHtml(burger))
+      .addTo(burgerMapMarkers);
+  });
+
+  if (bounds.length) {
+    burgerMap.fitBounds(bounds, { padding: [22, 22], maxZoom: 13 });
+  } else {
+    burgerMap.setView([45.5152, -122.6784], 11);
+  }
+
+  window.requestAnimationFrame(() => burgerMap.invalidateSize());
 }
 
 function renderSchedule() {
@@ -1987,6 +2065,7 @@ function showView(viewName) {
     tab.setAttribute("aria-selected", String(isActive));
   });
   els.views.forEach((view) => view.classList.toggle("is-active", view.id === `${viewName}View`));
+  if (viewName === "map") renderMap();
   updateBackToSectionButton();
 }
 

@@ -7,6 +7,7 @@
     <title>Burger Week</title>
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -48,7 +49,7 @@
       <section class="issue-banner" aria-label="Outstanding issues">
         <strong>Outstanding issues</strong>
         <ul>
-          <li>Map section is under construction</li>
+          <li>Map popups and filters are next</li>
         </ul>
       </section>
 
@@ -338,6 +339,7 @@
     </template>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
+    <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
     <script src="app.js" defer></script>
   </body>

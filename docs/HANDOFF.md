@@ -63,6 +63,8 @@ The app currently reads one listing file when served over HTTP:
 
 - `data/burger-week-2026.csv`
 - `docs/MAP.md` - free map provider options and the implementation plan for replacing the schematic Map tab.
+- `scripts/geocode-burger-week.py` - optional one-time geocoding helper for filling missing CSV latitude/longitude values.
+- `assets/vendor/leaflet/` - vendored Leaflet 1.9.4 assets used by the Map tab.
 
 The event metadata for Burger Week 2026 lives in `eventDefinitions` in `app.js` so the app remains static and only needs one CSV data file for the event listing rows.
 
@@ -156,15 +158,15 @@ Recent browser verification confirmed:
 - Want counts are currently local-only, so they are useful for prototype behavior but not a real group-wide hype signal until Supabase is connected.
 - Hidden burgers are currently local-only and should become private per-user backend data when Supabase is connected.
 - `data/burger-week-2026.csv` currently has 124 Burger Week 2026 rows and should be treated as the source of truth unless the user provides a newer source file or asks for a correction.
-- The CSV has address and maps URL coverage, but latitude/longitude are still blank.
-- The Map view is still schematic. Real map work is Phase 2; see `docs/MAP.md`.
+- The CSV has address, latitude/longitude, and maps URL coverage for all 124 rows.
+- The Map view uses Leaflet with all 124 CSV coordinates. Popups and filter-linked marker states are the next map work; see `docs/MAP.md`.
 
 ## Best Next Tasks
 
 Highest value next steps:
 
-1. Fill and validate latitude/longitude for all 124 rows in `data/burger-week-2026.csv`.
-2. Replace the schematic map with Leaflet-backed real pins after coordinates are filled in `data/burger-week-2026.csv`.
+1. Add customizable Leaflet marker states and popups that reuse Burger Board details.
+2. Connect active filters such as Open now and Hide visited to Map marker visibility.
 3. Connect Supabase Auth and shared reviews/photos.
 4. Improve the rating control UX. Twenty-one buttons works, but a slider plus numeric stepper may feel better on mobile.
 5. Add edit/delete review actions for the logged-in user's reviews.
