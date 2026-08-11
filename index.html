@@ -14,16 +14,11 @@
       <img src="assets/burger-counter-hero.png" alt="" class="hero-art">
       <div class="hero-shade"></div>
       <nav class="topbar" aria-label="Primary">
-        <a class="brand" href="#feed" aria-label="Burger Week home">
-          <span class="brand-mark" aria-hidden="true">BW</span>
-          <span>Burger Week</span>
-        </a>
-        <div class="topbar-actions">
-          <a class="event-link" href="https://everout.com/portland/events/the-portland-mercurys-burger-week-2026/e222750/" target="_blank" rel="noreferrer">Official Event</a>
-          <select id="eventPicker" aria-label="Event">
-            <option value="burger-week-2026">Burger Week 2026</option>
-            <!-- <option value="future-week-template">Future Week Template</option> -->
-          </select>
+        <div class="topbar-brand-row">
+          <a class="brand" href="#feed" aria-label="Burger Week home">
+            <span class="brand-mark" aria-hidden="true">BW</span>
+            <span>Burger Week</span>
+          </a>
           <button class="feedback-button" id="feedbackButton" type="button" aria-label="Report a bug or request a feature">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M8 7.5 6 5.5M16 7.5l2-2M6 13H3.5M20.5 13H18M7 18l-2 2M17 18l2 2"></path>
@@ -31,6 +26,13 @@
               <path d="M8 12h8M12 7v13"></path>
             </svg>
           </button>
+        </div>
+        <div class="topbar-actions">
+          <a class="event-link" href="https://everout.com/portland/events/the-portland-mercurys-burger-week-2026/e222750/" target="_blank" rel="noreferrer">Official Event</a>
+          <select id="eventPicker" aria-label="Event">
+            <option value="burger-week-2026">Burger Week 2026</option>
+            <!-- <option value="future-week-template">Future Week Template</option> -->
+          </select>
           <button class="auth-button" id="authButton" type="button">Log In</button>
         </div>
       </nav>

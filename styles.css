@@ -69,13 +69,21 @@ button {
 }
 
 .topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 16px;
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
   padding: 18px 0;
+}
+
+.topbar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
 }
 
 .brand {
@@ -125,6 +133,7 @@ button {
   justify-content: flex-end;
   gap: 10px;
   min-width: 0;
+  width: 100%;
 }
 
 .topbar select {
@@ -319,7 +328,7 @@ h1 {
 
 main {
   width: min(1180px, calc(100% - 32px));
-  margin: -38px auto 64px;
+  margin: -62px auto 64px;
   position: relative;
   z-index: 2;
 }
@@ -327,7 +336,7 @@ main {
 .issue-banner {
   display: grid;
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 10px;
   padding: 14px;
   border: var(--line);
   border-radius: 8px;
@@ -413,7 +422,7 @@ main {
 
 .controls-band {
   position: relative;
-  margin-top: 42px;
+  margin-top: 50px;
   padding: 14px;
   background: var(--pickle);
   border: var(--line);
@@ -437,9 +446,10 @@ main {
 
 .controls-toggle {
   position: absolute;
-  bottom: calc(100% + 3px);
-  right: 14px;
+  bottom: calc(100% - 1px);
+  right: 13px;
   z-index: 2;
+  border-bottom: 0;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -1620,7 +1630,7 @@ legend {
 
 @media (max-width: 980px) {
   main {
-    margin-top: -30px;
+    margin-top: clamp(-110px, -12vw, -72px);
   }
 
   .stats-grid,
@@ -1670,8 +1680,7 @@ legend {
   }
 
   .topbar {
-    align-items: start;
-    flex-direction: column;
+    gap: 12px;
   }
 
   .topbar-actions {
@@ -1682,10 +1691,6 @@ legend {
 
   .topbar select {
     max-width: 100%;
-  }
-
-  .feedback-button {
-    width: 100%;
   }
 
   .hero-copy {
