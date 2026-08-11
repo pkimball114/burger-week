@@ -515,8 +515,34 @@ main {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(130px, 1fr));
+  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(120px, 1fr)) repeat(2, minmax(128px, auto));
   gap: 12px;
+}
+
+.filter-check {
+  display: flex;
+  align-items: center;
+  align-self: end;
+  gap: 9px;
+  min-height: 44px;
+  border: var(--line);
+  border-radius: 8px;
+  background: var(--plate);
+  padding: 10px 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.filter-check input {
+  width: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  border: 2px solid var(--ink);
+  box-shadow: none;
+  accent-color: var(--ketchup);
+}
+
+.filter-check span {
+  font-weight: 950;
 }
 
 label {
@@ -1722,6 +1748,18 @@ legend {
 
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar > label:not(.filter-check) {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar .filter-check {
+    grid-column: auto;
   }
 
   .stat-card {

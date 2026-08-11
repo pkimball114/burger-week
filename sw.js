@@ -1,4 +1,4 @@
-const cacheName = "burger-week-v37";
+const cacheName = "burger-week-v39";
 const assets = [
   "./",
   "./index.html",

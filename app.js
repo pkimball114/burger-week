@@ -53,6 +53,8 @@ const els = {
   friendFilter: $("#friendFilter"),
   ratingFilter: $("#ratingFilter"),
   sortSelect: $("#sortSelect"),
+  openNowFilter: $("#openNowFilter"),
+  hideVisitedFilter: $("#hideVisitedFilter"),
   tabs: $$(".tab"),
   views: $$(".view"),
   reviewGrid: $("#reviewGrid"),
@@ -152,7 +154,9 @@ let filters = {
   neighborhood: "all",
   friend: "all",
   rating: 0,
-  sort: "recent"
+  sort: "recent",
+  openNow: false,
+  hideVisited: false
 };
 
 function fallbackEvent() {
@@ -596,6 +600,40 @@ function formatWeeklyHours(availability) {
 
 function hoursForDate(burger, date) {
   return burger.availability?.find((entry) => entry.date === date)?.hoursText || "";
+}
+
+function localDateKey(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function minutesSinceMidnight(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function addDays(date, offset) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + offset);
+  return copy;
+}
+
+function burgerOpenAt(burger, date = new Date()) {
+  const todayKey = localDateKey(date);
+  const yesterdayKey = localDateKey(addDays(date, -1));
+  const nowMinutes = minutesSinceMidnight(date);
+  const today = burger.availability?.find((entry) => entry.date === todayKey);
+  const yesterday = burger.availability?.find((entry) => entry.date === yesterdayKey);
+  const openToday = today?.parsedHours?.some((span) => nowMinutes >= span.startMinutes && nowMinutes < Math.min(span.endMinutes, 24 * 60));
+  const openFromYesterday = yesterday?.parsedHours?.some((span) => {
+    if (span.endMinutes <= 24 * 60) return false;
+    const overnightMinutes = nowMinutes + 24 * 60;
+    return overnightMinutes >= span.startMinutes && overnightMinutes < span.endMinutes;
+  });
+
+  return Boolean(openToday || openFromYesterday);
 }
 
 function coordinateToMapPoint(latitude, longitude, fallbackIndex) {
@@ -1304,6 +1342,32 @@ function reviewBelongsToAccount(review, account) {
   );
 }
 
+function personalVisitedBurgerIds() {
+  const account = getAccount();
+  if (!account) return new Set();
+  return new Set(getReviews().filter((review) => reviewBelongsToAccount(review, account)).map((review) => review.burgerId));
+}
+
+function burgerSearchText(burger) {
+  return [
+    burger.restaurant,
+    burger.burger,
+    burger.description,
+    burger.neighborhood,
+    burger.tags.join(" ")
+  ].join(" ").toLowerCase();
+}
+
+function burgerMatchesActiveFilters(burger, visitedIds = personalVisitedBurgerIds()) {
+  const search = filters.search.toLowerCase();
+  return (
+    (!search || burgerSearchText(burger).includes(search)) &&
+    (filters.neighborhood === "all" || burger.neighborhood === filters.neighborhood) &&
+    (!filters.openNow || burgerOpenAt(burger)) &&
+    (!filters.hideVisited || !visitedIds.has(burger.id))
+  );
+}
+
 function summarizeReviews(reviews) {
   const avg = reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
   return {
@@ -1373,6 +1437,7 @@ function hydrateFilters() {
 
 function getFilteredReviews() {
   const search = filters.search.toLowerCase();
+  const visitedIds = personalVisitedBurgerIds();
   return getReviews()
     .filter((review) => {
       const haystack = [
@@ -1390,6 +1455,8 @@ function getFilteredReviews() {
         (!search || haystack.includes(search)) &&
         (filters.neighborhood === "all" || review.burger.neighborhood === filters.neighborhood) &&
         (filters.friend === "all" || review.reviewer === filters.friend) &&
+        (!filters.openNow || burgerOpenAt(review.burger)) &&
+        (!filters.hideVisited || !visitedIds.has(review.burgerId)) &&
         review.rating >= filters.rating
       );
     })
@@ -1678,13 +1745,25 @@ function renderHiddenProfileList() {
 function renderBurgerList() {
   const event = getEvent();
   const hiddenIds = accountHiddenIds();
-  const visibleBurgers = event.burgers.filter((burger) => !hiddenIds.has(burger.id));
+  const visibleUnhiddenBurgers = event.burgers.filter((burger) => !hiddenIds.has(burger.id));
+  const visitedIds = personalVisitedBurgerIds();
+  const visibleBurgers = visibleUnhiddenBurgers.filter((burger) => burgerMatchesActiveFilters(burger, visitedIds));
 
-  if (!visibleBurgers.length) {
+  if (!visibleUnhiddenBurgers.length) {
     els.burgerList.innerHTML = `
       <div class="empty-state">
         <h3>No visible burgers left.</h3>
         <p>Open your profile from the top bar to unhide burgers.</p>
+      </div>
+    `;
+    return;
+  }
+
+  if (!visibleBurgers.length) {
+    els.burgerList.innerHTML = `
+      <div class="empty-state">
+        <h3>No burgers match the current filters.</h3>
+        <p>Try clearing Open now, Hide visited, search, or area filters.</p>
       </div>
     `;
     return;
@@ -2221,20 +2300,27 @@ function openReviewEditor(reviewId) {
 }
 
 function resetFilters() {
-  filters = { search: "", neighborhood: "all", friend: "all", rating: 0, sort: "recent" };
+  filters = { search: "", neighborhood: "all", friend: "all", rating: 0, sort: "recent", openNow: false, hideVisited: false };
   els.searchInput.value = "";
   els.ratingFilter.value = "0";
   els.sortSelect.value = "recent";
+  if (els.openNowFilter) els.openNowFilter.checked = false;
+  if (els.hideVisitedFilter) els.hideVisitedFilter.checked = false;
+}
+
+function renderFilteredViews() {
+  renderFeed();
+  renderBurgerList();
 }
 
 els.searchInput.addEventListener("input", (event) => {
   filters.search = event.target.value;
-  renderFeed();
+  renderFilteredViews();
 });
 
 els.neighborhoodFilter.addEventListener("change", (event) => {
   filters.neighborhood = event.target.value;
-  renderFeed();
+  renderFilteredViews();
 });
 
 els.friendFilter.addEventListener("change", (event) => {
@@ -2250,6 +2336,16 @@ els.ratingFilter.addEventListener("change", (event) => {
 els.sortSelect.addEventListener("change", (event) => {
   filters.sort = event.target.value;
   renderFeed();
+});
+
+els.openNowFilter?.addEventListener("change", (event) => {
+  filters.openNow = event.target.checked;
+  renderFilteredViews();
+});
+
+els.hideVisitedFilter?.addEventListener("change", (event) => {
+  filters.hideVisited = event.target.checked;
+  renderFilteredViews();
 });
 
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));

@@ -46,7 +46,7 @@ Implemented UX:
 - Burger Board rows include a Hide button. Hidden burgers are removed from that user's Burger Board and Hype List.
 - Burger Board availability blocks support local per-user wait-time reports and deleting those reports.
 - The login/profile modal includes a Hidden Burgers list with Unhide buttons.
-- Filters: search, area, friend, minimum rating, and sort.
+- Filters: search, area, friend, minimum rating, sort, Open now, and Hide visited. Open now uses the user's local current time against parsed CSV hours, including overnight hours after midnight.
 - Views: Friend Feed, Burger Board, Map Preview, Schedule.
 - Schedule combines manually planned stops with the logged-in user's own review timestamps as read-only visited stops.
 - Feed and Burger Board show a floating Top button after scrolling; it returns to the active section heading rather than the page hero.
