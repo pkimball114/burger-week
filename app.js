@@ -3290,7 +3290,13 @@ els.clearLocalData.addEventListener("click", () => {
 });
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker
+    .register("sw.js")
+    .then((registration) => {
+      registration.update().catch(() => {});
+      registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+    })
+    .catch(() => {});
 }
 
 loadEvents().then(async (loadedEvents) => {
