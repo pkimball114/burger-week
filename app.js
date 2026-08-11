@@ -2035,6 +2035,7 @@ function renderLeafletMap(mappedBurgers) {
 }
 
 function setMapFullscreen(isFullscreen) {
+  const wasFullscreen = mapFullscreen;
   mapFullscreen = Boolean(isFullscreen);
   $("#mapView")?.classList.toggle("is-map-fullscreen", mapFullscreen);
   document.body.classList.toggle("map-fullscreen-active", mapFullscreen);
@@ -2045,6 +2046,9 @@ function setMapFullscreen(isFullscreen) {
   renderMap();
   window.requestAnimationFrame(() => {
     burgerMap?.invalidateSize();
+    if (wasFullscreen && !mapFullscreen) {
+      focusMapHeading();
+    }
   });
 }
 
@@ -2202,6 +2206,17 @@ function scrollToCurrentSectionHeading() {
   const target = currentBackToSectionTarget();
   if (!target) return;
 
+  focusHeading(target);
+}
+
+function focusMapHeading() {
+  const target = $("#mapTitle");
+  if (!target) return;
+
+  focusHeading(target);
+}
+
+function focusHeading(target) {
   if (!target.hasAttribute("tabindex")) {
     target.setAttribute("tabindex", "-1");
   }
