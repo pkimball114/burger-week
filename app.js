@@ -22,6 +22,11 @@ const feedbackStoreKey = "burger-week-feedback-v1";
 const supabasePhotoBucket = "burger-review-photos";
 const reviewPhotoMaxDimension = 1600;
 const reviewPhotoJpegQuality = 0.82;
+const testAccount = {
+  id: "local-test-user",
+  displayName: "Test",
+  email: "test@example.local"
+};
 const waitTimeOptions = [
   ["immediate", "Immediate (0-5 minutes)"],
   ["standard", "Standard (5-15 minutes)"],
@@ -111,6 +116,7 @@ const els = {
   appStatus: $("#appStatus"),
   reviewStatus: $("#reviewStatus"),
   closeLogin: $("#closeLogin"),
+  testLoginButton: $("#testLoginButton"),
   waitDialog: $("#waitDialog"),
   waitForm: $("#waitForm"),
   waitBurgerName: $("#waitBurgerName"),
@@ -156,6 +162,7 @@ let remoteWantsByEvent = {};
 let remoteHiddenByEvent = {};
 let appStatusTimer = 0;
 let activeReviewEditId = "";
+let reviewBurgerSelection = "";
 let reviewSubmitting = false;
 let feedbackSubmitting = false;
 let pendingReviewActions = new Set();
@@ -865,6 +872,23 @@ function setAuthStatus(message) {
   renderAuth();
 }
 
+async function continueAsTestUser() {
+  if (isSupabaseReady()) {
+    setAuthStatus("Log out first if you want to switch to the local Test user.");
+    return;
+  }
+
+  setAccount(testAccount);
+  els.loginNameInput.value = testAccount.displayName;
+  els.loginEmailInput.value = testAccount.email;
+  els.loginPasswordInput.value = "";
+  setAuthStatus("Using local Test user. Shared Supabase data is not affected.");
+  els.loginDialog.close();
+  renderAll();
+  showAppStatus("Using Test user.");
+  await resumePendingAuthAction();
+}
+
 function setReviewStatus(message = "") {
   if (!els.reviewStatus) return;
   els.reviewStatus.textContent = message;
@@ -1460,8 +1484,8 @@ function accountIdFromEmail(email) {
 
 function renderStars(rating) {
   return Array.from({ length: 5 }, (_, index) => {
-    const value = index + 1;
-    return `<span class="${rating >= value ? "filled" : ""}" aria-hidden="true">★</span>`;
+    const fill = Math.min(100, Math.max(0, (rating - index) * 100));
+    return `<span class="star-glyph" style="--star-fill: ${fill}%;" aria-hidden="true">★</span>`;
   }).join("");
 }
 
@@ -1479,9 +1503,14 @@ function hydrateFilters() {
   els.friendFilter.innerHTML = friends
     .map((friend) => `<option value="${escapeAttr(friend)}">${friend === "all" ? "Everyone" : escapeHtml(friend)}</option>`)
     .join("");
+  const activeEditReview = activeReviewEditId ? getReviews().find((review) => review.id === activeReviewEditId) : null;
+  const currentReviewBurger = reviewBurgerSelection || els.burgerSelect.value || activeEditReview?.burgerId || "";
   els.burgerSelect.innerHTML = event.burgers
     .map((burger) => `<option value="${escapeAttr(burger.id)}">${escapeHtml(burger.restaurant)} - ${escapeHtml(burger.burger)}</option>`)
     .join("");
+  if (event.burgers.some((burger) => burger.id === currentReviewBurger)) {
+    els.burgerSelect.value = currentReviewBurger;
+  }
   if (els.scheduleBurgerSelect) {
     const currentScheduleBurger = els.scheduleBurgerSelect.value;
     els.scheduleBurgerSelect.innerHTML = event.burgers
@@ -2235,16 +2264,13 @@ function renderScheduleDayTabs(event = getEvent(), activeDate = ensureSelectedSc
 }
 
 function renderStarInput() {
-  const values = Array.from({ length: 21 }, (_, index) => index * 0.25);
-  els.ratingOutput.value = formatRating(currentRating);
+  const clampedRating = Math.min(5, Math.max(0, Math.round(currentRating * 4) / 4));
+  currentRating = clampedRating;
+  els.ratingOutput.value = formatRating(clampedRating);
   els.ratingInput.value = String(currentRating);
-  els.starInput.innerHTML = values
-    .map((value) => `
-      <button type="button" class="${value === currentRating ? "selected" : ""}" data-rating="${value}" aria-label="${formatRating(value)} out of 5">
-        ${formatRating(value)}
-      </button>
-    `)
-    .join("");
+  els.starInput.value = String(clampedRating);
+  els.starInput.style.setProperty("--rating-percent", `${(clampedRating / 5) * 100}%`);
+  els.starInput.setAttribute("aria-valuetext", `${formatRating(clampedRating)} out of 5 stars`);
 }
 
 function renderAll() {
@@ -2545,6 +2571,7 @@ function setReviewFormMode(review = null) {
 
   if (isEditing) {
     currentRating = Number(review.rating) || 0;
+    reviewBurgerSelection = review.burgerId;
     els.burgerSelect.value = review.burgerId;
     els.ratingInput.value = String(currentRating);
     els.waitTimeInput.value = review.waitTime || "";
@@ -2556,10 +2583,19 @@ function setReviewFormMode(review = null) {
   }
 
   els.reviewForm.reset();
+  reviewBurgerSelection = els.burgerSelect.value || "";
   currentRating = 5;
   els.waitTimeInput.value = "";
   renderStarInput();
   setReviewStatus("");
+}
+
+function restoreActiveReviewBurgerSelection() {
+  if (!activeReviewEditId || !els.dialog.open || !reviewBurgerSelection) return;
+  if (!getEvent().burgers.some((burger) => burger.id === reviewBurgerSelection)) return;
+  if (els.burgerSelect.value !== reviewBurgerSelection) {
+    els.burgerSelect.value = reviewBurgerSelection;
+  }
 }
 
 function openReviewComposer() {
@@ -2660,6 +2696,13 @@ window.addEventListener("keydown", (event) => {
     setMapFullscreen(false);
   }
 });
+window.addEventListener("focus", restoreActiveReviewBurgerSelection);
+window.addEventListener("pageshow", restoreActiveReviewBurgerSelection);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    window.setTimeout(restoreActiveReviewBurgerSelection, 0);
+  }
+});
 els.backToSection?.addEventListener("click", scrollToCurrentSectionHeading);
 
 els.controlsToggle.addEventListener("click", () => {
@@ -2705,6 +2748,10 @@ els.authButton.addEventListener("click", () => {
   els.loginDialog.showModal();
 });
 els.closeLogin.addEventListener("click", () => els.loginDialog.close());
+els.testLoginButton?.addEventListener("click", continueAsTestUser);
+els.burgerSelect.addEventListener("change", () => {
+  reviewBurgerSelection = els.burgerSelect.value;
+});
 
 els.feedbackButton?.addEventListener("click", openFeedbackDialog);
 els.closeFeedbackDialog?.addEventListener("click", closeFeedbackDialog);
@@ -2934,10 +2981,13 @@ els.logoutButton.addEventListener("click", async () => {
   renderAll();
 });
 
-els.starInput.addEventListener("click", (event) => {
-  const button = event.target.closest("button");
-  if (!button) return;
-  currentRating = Number(button.dataset.rating);
+els.starInput.addEventListener("input", () => {
+  currentRating = Number(els.starInput.value);
+  renderStarInput();
+});
+
+els.starInput.addEventListener("change", () => {
+  currentRating = Number(els.starInput.value);
   renderStarInput();
 });
 
@@ -3220,6 +3270,7 @@ els.reviewForm.addEventListener("submit", async (event) => {
       els.reviewForm.reset();
       currentRating = 5;
       activeReviewEditId = "";
+      reviewBurgerSelection = "";
       renderStarInput();
       els.dialog.close();
       await refreshSupabaseData();
@@ -3264,6 +3315,7 @@ els.reviewForm.addEventListener("submit", async (event) => {
     els.reviewForm.reset();
     currentRating = 5;
     activeReviewEditId = "";
+    reviewBurgerSelection = "";
     renderStarInput();
     els.dialog.close();
     renderAll();

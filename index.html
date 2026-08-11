@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=52">
+    <link rel="stylesheet" href="styles.css?v=55">
   </head>
   <body>
     <header class="hero">
@@ -213,8 +213,15 @@
         </label>
         <fieldset class="star-field">
           <legend>Rating</legend>
-          <output id="ratingOutput" for="starInput">5.00</output>
-          <div class="stars" id="starInput" role="radiogroup" aria-label="Rating out of 5"></div>
+          <div class="rating-scale-value">
+            <output id="ratingOutput" for="starInput">5.00</output>
+            <span>stars</span>
+          </div>
+          <input class="rating-slider" id="starInput" type="range" min="0" max="5" step="0.25" value="5" aria-label="Rating out of 5">
+          <div class="rating-scale-labels" aria-hidden="true">
+            <span>0</span>
+            <span>5</span>
+          </div>
           <input id="ratingInput" name="rating" type="hidden" value="5">
         </fieldset>
         <label>
@@ -276,6 +283,7 @@
         <div class="dialog-actions">
           <button class="ghost-button" type="button" id="logoutButton">Log Out</button>
           <div class="auth-submit-actions">
+            <button class="ghost-button test-login-button" type="button" id="testLoginButton">Continue as Test</button>
             <button class="ghost-button" type="submit" name="authIntent" value="signup">Create Account</button>
             <button class="primary-action" type="submit" name="authIntent" value="login">Log In</button>
           </div>
@@ -396,6 +404,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=53" defer></script>
+    <script src="app.js?v=56" defer></script>
   </body>
 </html>
