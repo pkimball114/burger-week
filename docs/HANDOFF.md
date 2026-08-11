@@ -62,6 +62,7 @@ Important limitation:
 The app currently reads one listing file when served over HTTP:
 
 - `data/burger-week-2026.csv`
+- `docs/MAP.md` - free map provider options and the implementation plan for replacing the schematic Map tab.
 
 The event metadata for Burger Week 2026 lives in `eventDefinitions` in `app.js` so the app remains static and only needs one CSV data file for the event listing rows.
 
@@ -154,26 +155,26 @@ Recent browser verification confirmed:
 - The current local login is only a scaffold. It stores a display name/email locally and is not secure authentication.
 - Want counts are currently local-only, so they are useful for prototype behavior but not a real group-wide hype signal until Supabase is connected.
 - Hidden burgers are currently local-only and should become private per-user backend data when Supabase is connected.
-- `data/burger-week-2026.csv` currently has only a small number of manually written rows; generated placeholders fill out the 124-burger interface.
-- EverOut could not be reliably fetched by automation in the prior work session, so do not assume the local data is complete or official.
-- The Map view is still schematic. Real map work is Phase 2.
+- `data/burger-week-2026.csv` currently has 124 Burger Week 2026 rows and should be treated as the source of truth unless the user provides a newer source file or asks for a correction.
+- The CSV has address and maps URL coverage, but latitude/longitude are still blank.
+- The Map view is still schematic. Real map work is Phase 2; see `docs/MAP.md`.
 
 ## Best Next Tasks
 
 Highest value next steps:
 
-1. Replace placeholder Burger Week data with the real 124 restaurants and burgers from EverOut/manual entry.
-2. Continue replacing generated placeholders with real rows in `data/burger-week-2026.csv`.
+1. Fill and validate latitude/longitude for all 124 rows in `data/burger-week-2026.csv`.
+2. Replace the schematic map with Leaflet-backed real pins after coordinates are filled in `data/burger-week-2026.csv`.
 3. Connect Supabase Auth and shared reviews/photos.
 4. Improve the rating control UX. Twenty-one buttons works, but a slider plus numeric stepper may feel better on mobile.
 5. Add edit/delete review actions for the logged-in user's reviews.
-6. Replace the schematic map with Leaflet or a maps deep-link list.
+6. Add future food weeks without moving current core Burger Week listing data out of the CSV.
 
 ## Suggested Prompt For The Next Conversation
 
 Use this:
 
-> Continue development of the Burger Week app in `/Users/parkerkimball/Documents/Burger Week`. First read `docs/HANDOFF.md`, `README.md`, `app.js`, `index.html`, and `styles.css`. Do not assume the current data is official; `data/burger-week-2026.csv` is incomplete event data that pads to 124 burgers. Keep the app static/GitHub-Pages-compatible unless I explicitly ask for a backend. Preserve the current Bob's-Burgers-inspired visual direction without using copyrighted characters/logos. After inspecting the code, propose the smallest safe implementation plan for my requested change, then implement it and verify with `node --check app.js`, JSON validation, and browser checks on a fresh localhost port to avoid service-worker cache.
+> Continue development of the Burger Week app in `/Users/parkerkimball/Documents/Burger Week`. First read `docs/HANDOFF.md`, `README.md`, `app.js`, `index.html`, `styles.css`, and `data/burger-week-2026.csv`. Treat `data/burger-week-2026.csv` as the current source of truth for all 124 Burger Week 2026 listing records unless I provide a newer source file or ask for a correction. Keep the app static/GitHub-Pages-compatible unless I explicitly ask for a backend. Preserve the current Bob's-Burgers-inspired visual direction without using copyrighted characters/logos. After inspecting the code, propose the smallest safe implementation plan for my requested change, then implement it and verify with `node --check app.js`, JSON validation, CSV validation if data changes, and browser checks on a fresh localhost port when UI behavior changes.
 
 If the next task is Supabase:
 

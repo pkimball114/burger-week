@@ -46,7 +46,7 @@ Phase 1:
 - GitHub Pages compatible.
 
 Phase 2:
-- Replace the schematic map with Mapbox, Google Maps, or Leaflet.
+- Replace the schematic map with a real interactive map. See [docs/MAP.md](docs/MAP.md) for the current free-provider recommendation and implementation steps.
 - Add exact addresses, coordinates, restaurant hours, and blackout dates.
 - Turn the week calendar into a planning view with availability by day.
 
