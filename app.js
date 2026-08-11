@@ -30,6 +30,8 @@ const waitTimeOptions = [
 ];
 const dayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
 const weekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short" });
+const longWeekdayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "long" });
+const monthDayFormatter = new Intl.DateTimeFormat("en-US", { month: "numeric", day: "numeric" });
 const timestampFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
@@ -65,6 +67,9 @@ const els = {
   mapList: $("#mapList"),
   mapFullscreenToggle: $("#mapFullscreenToggle"),
   mapPopupOptions: $$("[data-map-popup-option]"),
+  scheduleDialog: $("#scheduleDialog"),
+  scheduleDayTabs: $("#scheduleDayTabs"),
+  openScheduleForm: $("#openScheduleForm"),
   scheduleForm: $("#scheduleForm"),
   scheduleBurgerSelect: $("#scheduleBurgerSelect"),
   scheduleDateInput: $("#scheduleDateInput"),
@@ -72,6 +77,8 @@ const els = {
   scheduleStatusSelect: $("#scheduleStatusSelect"),
   scheduleNoteInput: $("#scheduleNoteInput"),
   scheduleList: $("#scheduleList"),
+  closeScheduleForm: $("#closeScheduleForm"),
+  cancelScheduleStop: $("#cancelScheduleStop"),
   backToSection: $("#backToSection"),
   dialog: $("#reviewDialog"),
   reviewDialogTitle: $("#reviewDialogTitle"),
@@ -133,6 +140,7 @@ let pendingWaitBurgerId = "";
 let activeWaitBurgerId = "";
 let controlsCollapsed = false;
 let hypeCollapsed = false;
+let selectedScheduleDate = "";
 let currentViewName = "feed";
 let statsScope = "personal";
 let wantedStatIndex = 0;
@@ -631,6 +639,48 @@ function addDays(date, offset) {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + offset);
   return copy;
+}
+
+function defaultScheduleDate(event = getEvent()) {
+  const today = localDateKey(new Date());
+  if (event?.dates?.includes(today)) return today;
+  return event?.dates?.[0] || "";
+}
+
+function ensureSelectedScheduleDate(event = getEvent()) {
+  if (!event?.dates?.length) {
+    selectedScheduleDate = "";
+    return "";
+  }
+
+  if (!event.dates.includes(selectedScheduleDate)) {
+    selectedScheduleDate = defaultScheduleDate(event);
+  }
+
+  return selectedScheduleDate;
+}
+
+function dateAtNoon(date) {
+  return new Date(`${date}T12:00:00`);
+}
+
+function openScheduleDialog() {
+  const account = getAccount();
+  if (!account) {
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const activeDate = ensureSelectedScheduleDate();
+  if (els.scheduleDateInput && activeDate) {
+    els.scheduleDateInput.value = activeDate;
+  }
+  els.scheduleDialog?.showModal();
+  window.setTimeout(() => els.scheduleBurgerSelect?.focus(), 50);
+}
+
+function closeScheduleDialog() {
+  if (els.scheduleDialog?.open) els.scheduleDialog.close();
 }
 
 function burgerOpenAt(burger, date = new Date()) {
@@ -1442,13 +1492,14 @@ function hydrateFilters() {
     }
   }
   if (els.scheduleDateInput && !els.scheduleDateInput.value) {
-    els.scheduleDateInput.value = event.dates[0] || "";
+    els.scheduleDateInput.value = ensureSelectedScheduleDate(event);
   }
   if (els.scheduleDateInput) {
+    const activeScheduleDate = ensureSelectedScheduleDate(event);
     els.scheduleDateInput.min = event.dates[0] || "";
     els.scheduleDateInput.max = event.dates[event.dates.length - 1] || "";
     if (!event.dates.includes(els.scheduleDateInput.value)) {
-      els.scheduleDateInput.value = event.dates[0] || "";
+      els.scheduleDateInput.value = activeScheduleDate;
     }
   }
 
@@ -2054,6 +2105,10 @@ function setMapFullscreen(isFullscreen) {
 
 function renderSchedule() {
   if (!els.scheduleList) return;
+  const event = getEvent();
+  const activeDate = ensureSelectedScheduleDate(event);
+  renderScheduleDayTabs(event, activeDate);
+
   const account = getAccount();
   if (!account) {
     els.scheduleList.innerHTML = `
@@ -2100,6 +2155,7 @@ function renderSchedule() {
     }));
   const entries = [...reviewEntries, ...manualEntries]
     .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const visibleEntries = entries.filter((entry) => entry.date === activeDate);
 
   if (!entries.length) {
     els.scheduleList.innerHTML = `
@@ -2111,7 +2167,18 @@ function renderSchedule() {
     return;
   }
 
-  els.scheduleList.innerHTML = entries
+  if (!visibleEntries.length) {
+    const dayLabel = activeDate ? longWeekdayFormatter.format(dateAtNoon(activeDate)) : "this day";
+    els.scheduleList.innerHTML = `
+      <div class="empty-state">
+        <h3>No stops for ${escapeHtml(dayLabel)} yet.</h3>
+        <p>Add a stop for this day, or post a review to log a visit automatically.</p>
+      </div>
+    `;
+    return;
+  }
+
+  els.scheduleList.innerHTML = visibleEntries
     .map((entry) => {
       const statusLabel = entry.source === "review"
         ? "Reviewed"
@@ -2139,6 +2206,29 @@ function renderSchedule() {
             ? `<button class="ghost-button compact-button" type="button" data-delete-schedule="${escapeAttr(entry.id)}">Remove</button>`
             : `<span class="schedule-source">From review</span>`}
         </article>
+      `;
+    })
+    .join("");
+}
+
+function renderScheduleDayTabs(event = getEvent(), activeDate = ensureSelectedScheduleDate(event)) {
+  if (!els.scheduleDayTabs) return;
+
+  els.scheduleDayTabs.innerHTML = event.dates
+    .map((date) => {
+      const dateObject = dateAtNoon(date);
+      const isActive = date === activeDate;
+      return `
+        <button
+          class="schedule-day-button ${isActive ? "is-active" : ""}"
+          type="button"
+          role="tab"
+          aria-selected="${isActive}"
+          aria-label="${escapeAttr(longWeekdayFormatter.format(dateObject))}"
+          data-schedule-date="${escapeAttr(date)}">
+          <span>${escapeHtml(weekdayFormatter.format(dateObject))}</span>
+          <small>${escapeHtml(monthDayFormatter.format(dateObject))}</small>
+        </button>
       `;
     })
     .join("");
@@ -2599,6 +2689,7 @@ els.statsGrid.addEventListener("click", (event) => {
 els.eventPicker.addEventListener("change", async (event) => {
   currentEventId = event.target.value;
   wantedStatIndex = 0;
+  selectedScheduleDate = "";
   resetFilters();
   await refreshSupabaseData();
   renderAll();
@@ -2973,10 +3064,23 @@ els.hiddenList.addEventListener("click", (event) => {
   unhideBurger(unhideButton.dataset.unhideBurger);
 });
 
+els.scheduleDayTabs?.addEventListener("click", (event) => {
+  const dayButton = event.target.closest("[data-schedule-date]");
+  if (!dayButton) return;
+  selectedScheduleDate = dayButton.dataset.scheduleDate;
+  if (els.scheduleDateInput) els.scheduleDateInput.value = selectedScheduleDate;
+  renderSchedule();
+});
+
+els.openScheduleForm?.addEventListener("click", openScheduleDialog);
+els.closeScheduleForm?.addEventListener("click", closeScheduleDialog);
+els.cancelScheduleStop?.addEventListener("click", closeScheduleDialog);
+
 els.scheduleForm?.addEventListener("submit", (event) => {
   event.preventDefault();
   const account = getAccount();
   if (!account) {
+    closeScheduleDialog();
     els.loginDialog.showModal();
     return;
   }
@@ -2997,7 +3101,9 @@ els.scheduleForm?.addEventListener("submit", (event) => {
   };
 
   saveScheduleEntry(entry);
+  selectedScheduleDate = entry.date;
   els.scheduleNoteInput.value = "";
+  closeScheduleDialog();
   renderSchedule();
 });
 

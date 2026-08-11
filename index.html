@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=50">
+    <link rel="stylesheet" href="styles.css?v=51">
   </head>
   <body>
     <header class="hero">
@@ -181,35 +181,16 @@
 
       <section id="calendarView" class="view" aria-labelledby="calendarTitle">
         <div class="section-heading">
-          <h2 id="calendarTitle">Schedule</h2>
-          <p>Track where you went and what you want to hit next.</p>
+          <div>
+            <h2 id="calendarTitle">Schedule</h2>
+            <p>Track where you went and what you want to hit next.</p>
+          </div>
+          <button class="primary-action schedule-open-button" id="openScheduleForm" type="button">
+            <span aria-hidden="true">+</span>
+            <span>Add Stop</span>
+          </button>
         </div>
-        <form class="schedule-form" id="scheduleForm">
-          <label>
-            <span>Stop</span>
-            <select id="scheduleBurgerSelect" name="burgerId" required></select>
-          </label>
-          <label>
-            <span>Date</span>
-            <input id="scheduleDateInput" name="date" type="date" required>
-          </label>
-          <label>
-            <span>Time</span>
-            <input id="scheduleTimeInput" name="time" type="time" required>
-          </label>
-          <label>
-            <span>Status</span>
-            <select id="scheduleStatusSelect" name="status">
-              <option value="planned">Planned</option>
-              <option value="visited">Visited</option>
-            </select>
-          </label>
-          <label class="schedule-note-field">
-            <span>Note</span>
-            <input id="scheduleNoteInput" name="note" placeholder="Morning stop, 2:00 plan, quick snack run">
-          </label>
-          <button class="primary-action" type="submit">Add Stop</button>
-        </form>
+        <div class="schedule-day-tabs" id="scheduleDayTabs" role="tablist" aria-label="Schedule days"></div>
         <div class="schedule-list" id="scheduleList"></div>
       </section>
     </main>
@@ -332,6 +313,42 @@
       </form>
     </dialog>
 
+    <dialog id="scheduleDialog" class="review-dialog schedule-dialog">
+      <form class="schedule-form" id="scheduleForm" method="dialog">
+        <div class="dialog-top schedule-dialog-top">
+          <h2>Add Stop</h2>
+          <button class="icon-button" type="button" id="closeScheduleForm" aria-label="Close">x</button>
+        </div>
+        <label>
+          <span>Stop</span>
+          <select id="scheduleBurgerSelect" name="burgerId" required></select>
+        </label>
+        <label>
+          <span>Date</span>
+          <input id="scheduleDateInput" name="date" type="date" required>
+        </label>
+        <label>
+          <span>Time</span>
+          <input id="scheduleTimeInput" name="time" type="time" required>
+        </label>
+        <label>
+          <span>Status</span>
+          <select id="scheduleStatusSelect" name="status">
+            <option value="planned">Planned</option>
+            <option value="visited">Visited</option>
+          </select>
+        </label>
+        <label class="schedule-note-field">
+          <span>Note</span>
+          <input id="scheduleNoteInput" name="note" placeholder="Morning stop, 2:00 plan, quick snack run">
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost-button" type="button" id="cancelScheduleStop">Cancel</button>
+          <button class="primary-action" type="submit">Add Stop</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="feedbackDialog" class="review-dialog feedback-dialog">
       <form id="feedbackForm" method="dialog">
         <div class="dialog-top">
@@ -382,6 +399,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=49" defer></script>
+    <script src="app.js?v=51" defer></script>
   </body>
 </html>
