@@ -50,6 +50,7 @@ Implemented UX:
 - Views: Friend Feed, Burger Board, Map Preview, Schedule.
 - Schedule combines manually planned stops with the logged-in user's own review timestamps as read-only visited stops.
 - Feed and Burger Board show a floating Top button after scrolling; it returns to the active section heading rather than the page hero.
+- Top-right bug button opens a feedback modal for bug reports and feature requests.
 - Burger Board accommodates 124 burgers. If the editable event CSV has fewer rows, `app.js` pads generated placeholders to 124.
 
 Important limitation:
@@ -96,6 +97,7 @@ Hours should be entered exactly as listed on the source page. A blank `hours_<da
 Supabase is the intended shared backend. Existing files:
 
 - `docs/supabase-schema.sql`
+- `docs/supabase-feedback-reports-migration.sql`
 - `config/supabase.example.js`
 
 Recommended backend work:
@@ -105,7 +107,8 @@ Recommended backend work:
 3. Create a private-ish Storage bucket for review photos and restaurant photos.
 4. Replace local login with Supabase Auth using email/password accounts and profile display names.
 5. Replace `localStorage` review storage with Supabase `reviews`.
-6. Preserve RLS behavior: friends can read shared event data/reviews, but users only edit/delete their own reviews.
+6. Apply the feedback migration if the main schema was already installed before feedback reporting existed.
+7. Preserve RLS behavior: friends can read shared event data/reviews, but users only edit/delete their own reviews and only insert their own feedback reports.
 
 Do not create paid/cloud resources without explicit user confirmation.
 

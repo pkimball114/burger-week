@@ -2,7 +2,7 @@
 
 The app stays static and GitHub Pages-compatible. Supabase is optional at runtime:
 
-- If `config/supabase.js` has a valid project URL and public key, the app uses Supabase Auth, shared reviews, shared wants, private hidden burgers, and review photo Storage.
+- If `config/supabase.js` has a valid project URL and public key, the app uses Supabase Auth, shared reviews, shared wants, private hidden burgers, feedback reports, and review photo Storage.
 - If config is missing, blank, or invalid, the app falls back to the existing localStorage prototype.
 
 Do not put a service role key or secret key in this repo. Use only the project URL and a public publishable/anon key.
@@ -14,12 +14,14 @@ Use the Supabase Dashboard and create/select a project. No project was created b
 In the project, apply [docs/supabase-schema.sql](supabase-schema.sql) from the SQL editor only after you are ready. The schema:
 
 - Enables RLS on all app tables.
-- Stores profiles, shared reviews, wants, and hidden burger IDs.
+- Stores profiles, shared reviews, wants, hidden burger IDs, and app feedback reports.
 - Creates a private `burger-review-photos` Storage bucket.
 - Allows signed-in users to upload photos under their own user ID folder.
 - Keeps `event_id` and `food_item_id` as text on social tables so your static CSV remains the source of burger data.
 
 That last point matters: if you add rows to `data/burger-week-2026.csv` and push the static site, friends can review those new burger IDs without a database seed step. Keep `id` values stable once reviews exist.
+
+If you already applied the main schema before feedback reporting was added, apply [docs/supabase-feedback-reports-migration.sql](supabase-feedback-reports-migration.sql). The app only inserts feedback reports; there is no client-side report viewer. Query `public.feedback_reports` directly from Supabase when you want to review bug reports and feature requests.
 
 ## 2. Configure Auth URLs
 
@@ -154,5 +156,6 @@ If posting fails, check:
 - `docs/supabase-schema.sql` was applied.
 - The `burger-review-photos` bucket exists.
 - RLS policies exist on `reviews`, `wants`, `hidden_food_items`, and `storage.objects`.
+- RLS and an insert grant exist on `feedback_reports`.
 - Newer Supabase projects expose the tables to the Data API and grant access to `authenticated`.
 - The live URL is in Auth redirect URLs.

@@ -22,7 +22,7 @@ The app can be published with GitHub Pages from the repository root. See [docs/P
 
 ## Supabase
 
-Shared login, reviews, wants, hidden burgers, and review photo uploads are supported through optional Supabase configuration. See [docs/SUPABASE.md](docs/SUPABASE.md). If Supabase is not configured, the app remains usable in local-only mode.
+Shared login, reviews, wants, hidden burgers, feedback reports, and review photo uploads are supported through optional Supabase configuration. See [docs/SUPABASE.md](docs/SUPABASE.md). If Supabase is not configured, the app remains usable in local-only mode.
 
 For a no-domain, low-cost setup, disable Supabase email confirmation and keep signups friend-controlled. If you later want confirmation, invitation, or password reset emails without Supabase's default email limits, configure custom SMTP in [docs/SUPABASE.md](docs/SUPABASE.md#4-choose-an-auth-email-path).
 
@@ -61,6 +61,7 @@ For a dozen friends, Supabase is the lightest path:
 - Supabase Auth with invite-only email sign-in.
 - Postgres tables from [docs/supabase-schema.sql](docs/supabase-schema.sql).
 - Storage bucket for burger photos.
+- Insert-only feedback reports for bug reports and feature requests.
 - Row-level security so friends can read all reviews/wants, hide burgers privately, and only edit their own data.
 - GitHub Pages, Vercel, or Netlify for static hosting.
 

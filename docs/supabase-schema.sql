@@ -66,12 +66,26 @@ create table public.hidden_food_items (
   primary key (event_id, food_item_id, profile_id)
 );
 
+create table public.feedback_reports (
+  id uuid primary key default gen_random_uuid(),
+  event_id text not null,
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  display_name text,
+  email text,
+  feedback_type text not null check (feedback_type in ('bug', 'feature')),
+  message text not null check (length(trim(message)) > 0),
+  page_url text,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+
 alter table public.events enable row level security;
 alter table public.profiles enable row level security;
 alter table public.food_items enable row level security;
 alter table public.reviews enable row level security;
 alter table public.wants enable row level security;
 alter table public.hidden_food_items enable row level security;
+alter table public.feedback_reports enable row level security;
 
 create policy "authenticated read events" on public.events for select to authenticated using (true);
 create policy "authenticated read profiles" on public.profiles for select to authenticated using (true);
@@ -88,6 +102,7 @@ create policy "users delete own wants" on public.wants for delete to authenticat
 create policy "users read own hidden food items" on public.hidden_food_items for select to authenticated using ((select auth.uid()) = profile_id);
 create policy "users insert own hidden food items" on public.hidden_food_items for insert to authenticated with check ((select auth.uid()) = profile_id);
 create policy "users delete own hidden food items" on public.hidden_food_items for delete to authenticated using ((select auth.uid()) = profile_id);
+create policy "users insert own feedback reports" on public.feedback_reports for insert to authenticated with check ((select auth.uid()) = profile_id);
 
 grant usage on schema public to authenticated;
 grant select on public.events, public.profiles, public.food_items, public.reviews, public.wants to authenticated;
@@ -95,6 +110,7 @@ grant select, insert, update on public.profiles, public.reviews to authenticated
 grant delete on public.reviews to authenticated;
 grant insert, delete on public.wants, public.hidden_food_items to authenticated;
 grant select on public.hidden_food_items to authenticated;
+grant insert on public.feedback_reports to authenticated;
 
 insert into storage.buckets (id, name, public)
 values ('burger-review-photos', 'burger-review-photos', false)

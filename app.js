@@ -18,6 +18,7 @@ const wantStoreKey = "burger-week-wants-v1";
 const hiddenStoreKey = "burger-week-hidden-v1";
 const waitReportStoreKey = "burger-week-wait-reports-v1";
 const scheduleStoreKey = "burger-week-schedule-v1";
+const feedbackStoreKey = "burger-week-feedback-v1";
 const supabasePhotoBucket = "burger-review-photos";
 const reviewPhotoMaxDimension = 1600;
 const reviewPhotoJpegQuality = 0.82;
@@ -82,6 +83,14 @@ const els = {
   postReviewButton: $("#postReviewButton"),
   clearLocalData: $("#clearLocalData"),
   authButton: $("#authButton"),
+  feedbackButton: $("#feedbackButton"),
+  feedbackDialog: $("#feedbackDialog"),
+  feedbackForm: $("#feedbackForm"),
+  feedbackMessageInput: $("#feedbackMessageInput"),
+  feedbackStatus: $("#feedbackStatus"),
+  submitFeedbackButton: $("#submitFeedbackButton"),
+  closeFeedbackDialog: $("#closeFeedbackDialog"),
+  cancelFeedback: $("#cancelFeedback"),
   loginDialog: $("#loginDialog"),
   loginForm: $("#loginForm"),
   loginNameInput: $("#loginNameInput"),
@@ -136,6 +145,7 @@ let remoteHiddenByEvent = {};
 let appStatusTimer = 0;
 let activeReviewEditId = "";
 let reviewSubmitting = false;
+let feedbackSubmitting = false;
 let pendingReviewActions = new Set();
 let filters = {
   search: "",
@@ -386,6 +396,30 @@ function deleteScheduleEntry(entryId) {
     delete store[currentEventId][account.id][entryId];
     saveJsonStore(scheduleStoreKey, store);
   }
+}
+
+function saveLocalFeedbackReport(report) {
+  const account = getAccount() || {
+    id: "anonymous",
+    displayName: "Anonymous",
+    email: ""
+  };
+  const store = loadJsonStore(feedbackStoreKey);
+  const bucket = accountEventBucket(store, account);
+  bucket[report.id] = report;
+  saveJsonStore(feedbackStoreKey, store);
+}
+
+function closeFeedbackDialog() {
+  if (els.feedbackDialog?.open) els.feedbackDialog.close();
+  els.feedbackForm?.reset();
+  setFeedbackStatus("");
+}
+
+function openFeedbackDialog() {
+  setFeedbackStatus("");
+  els.feedbackForm?.reset();
+  els.feedbackDialog?.showModal();
 }
 
 function dateTimePartsFromTimestamp(timestamp) {
@@ -725,6 +759,13 @@ function setReviewStatus(message = "") {
   if (!els.reviewStatus) return;
   els.reviewStatus.textContent = message;
   els.reviewStatus.hidden = !message;
+}
+
+function setFeedbackStatus(message = "", isError = false) {
+  if (!els.feedbackStatus) return;
+  els.feedbackStatus.textContent = message;
+  els.feedbackStatus.hidden = !message;
+  els.feedbackStatus.classList.toggle("is-error", isError);
 }
 
 function showAppStatus(message, isError = false) {
@@ -2258,6 +2299,80 @@ els.authButton.addEventListener("click", () => {
   els.loginDialog.showModal();
 });
 els.closeLogin.addEventListener("click", () => els.loginDialog.close());
+
+els.feedbackButton?.addEventListener("click", openFeedbackDialog);
+els.closeFeedbackDialog?.addEventListener("click", closeFeedbackDialog);
+els.cancelFeedback?.addEventListener("click", closeFeedbackDialog);
+els.feedbackForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (feedbackSubmitting) return;
+
+  const account = getAccount();
+  const form = new FormData(els.feedbackForm);
+  const message = form.get("message").trim();
+  const feedbackType = form.get("feedbackType") || "bug";
+
+  if (!message) {
+    setFeedbackStatus("Add a short note before sending feedback.", true);
+    return;
+  }
+
+  if (supabaseClient && !isSupabaseReady()) {
+    setFeedbackStatus("Log in first so feedback can be sent.", true);
+    return;
+  }
+
+  const feedbackId = crypto.randomUUID();
+  const report = {
+    id: feedbackId,
+    eventId: currentEventId,
+    profileId: account?.id || null,
+    displayName: account?.displayName || "Anonymous",
+    email: account?.email || "",
+    feedbackType,
+    message,
+    pageUrl: window.location.href,
+    userAgent: navigator.userAgent,
+    createdAt: new Date().toISOString()
+  };
+
+  feedbackSubmitting = true;
+  setButtonLoading(els.submitFeedbackButton, true, els.submitFeedbackButton?.dataset.loadingLabel || "Sending...");
+  setFeedbackStatus("");
+
+  try {
+    if (isSupabaseReady()) {
+      const { error } = await supabaseClient.from("feedback_reports").insert({
+        id: report.id,
+        event_id: report.eventId,
+        profile_id: report.profileId,
+        display_name: report.displayName,
+        email: report.email,
+        feedback_type: report.feedbackType,
+        message: report.message,
+        page_url: report.pageUrl,
+        user_agent: report.userAgent,
+        created_at: report.createdAt
+      });
+
+      if (error) throw error;
+      closeFeedbackDialog();
+      showAppStatus("Feedback sent. Thank you.");
+      return;
+    }
+
+    saveLocalFeedbackReport(report);
+    closeFeedbackDialog();
+    showAppStatus("Feedback saved locally. Supabase is not connected, so it was not sent.");
+  } catch (error) {
+    const help = " Apply docs/supabase-feedback-reports-migration.sql, then make sure feedback_reports is exposed to the Data API.";
+    setFeedbackStatus(`Could not send feedback: ${error.message}.${help}`, true);
+    showAppStatus(`Could not send feedback: ${error.message}`, true);
+  } finally {
+    feedbackSubmitting = false;
+    setButtonLoading(els.submitFeedbackButton, false);
+  }
+});
 
 els.loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();

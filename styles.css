@@ -102,6 +102,7 @@ button {
 
 .topbar select,
 .auth-button,
+.feedback-button,
 .event-link,
 .toolbar input,
 .toolbar select,
@@ -131,7 +132,8 @@ button {
 }
 
 .event-link,
-.auth-button {
+.auth-button,
+.feedback-button {
   display: inline-grid;
   place-items: center;
   min-height: 44px;
@@ -149,6 +151,24 @@ button {
   background: var(--bun);
 }
 
+.feedback-button {
+  width: 48px;
+  min-width: 48px;
+  padding: 8px;
+  background: var(--ketchup);
+  color: white;
+}
+
+.feedback-button svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 @media (min-width: 721px) {
   .topbar-actions > * {
     flex: 0 0 auto;
@@ -156,6 +176,7 @@ button {
 
   .event-link,
   .topbar select,
+  .feedback-button,
   .auth-button {
     height: 56px;
     min-height: 56px;
@@ -169,6 +190,10 @@ button {
   .topbar select {
     width: 270px;
     max-width: none;
+  }
+
+  .feedback-button {
+    width: 56px;
   }
 
   .auth-button {
@@ -224,6 +249,7 @@ h1 {
 .ghost-button,
 .tab,
 .icon-button,
+.feedback-button,
 .auth-button {
   min-height: 44px;
   border: var(--line);
@@ -1459,6 +1485,54 @@ legend {
   color: var(--ketchup-dark);
 }
 
+.feedback-type-field {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.feedback-type-field legend {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  color: #6a5448;
+  font-weight: 900;
+}
+
+.feedback-type-field label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--plate);
+  padding: 9px 10px;
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 900;
+}
+
+.feedback-type-field input {
+  width: 18px;
+  min-height: 18px;
+  box-shadow: none;
+}
+
+.feedback-status {
+  padding: 9px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #e7f6ee;
+  color: var(--pickle);
+}
+
+.feedback-status.is-error {
+  background: #ffe4df;
+  color: var(--ketchup-dark);
+}
+
 .profile-panel {
   display: grid;
   gap: 10px;
@@ -1610,6 +1684,10 @@ legend {
     max-width: 100%;
   }
 
+  .feedback-button {
+    width: 100%;
+  }
+
   .hero-copy {
     padding-top: 68px;
     padding-bottom: 128px;
@@ -1684,5 +1762,9 @@ legend {
 
   .stars {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .feedback-type-field {
+    grid-template-columns: 1fr;
   }
 }
