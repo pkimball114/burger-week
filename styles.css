@@ -1497,9 +1497,15 @@ legend {
   box-shadow: 5px 5px 0 var(--ink);
 }
 
+.schedule-form > label {
+  min-width: 0;
+}
+
 .schedule-form input,
 .schedule-form select {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 44px;
   border: var(--line);
   border-radius: 8px;
@@ -1507,6 +1513,20 @@ legend {
   color: var(--ink);
   padding: 10px 12px;
   box-shadow: 3px 3px 0 var(--ink);
+}
+
+.schedule-form input[type="date"],
+.schedule-form input[type="time"] {
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: left;
+}
+
+.schedule-form input[type="date"]::-webkit-date-and-time-value,
+.schedule-form input[type="time"]::-webkit-date-and-time-value {
+  min-height: 1.2em;
+  text-align: left;
 }
 
 .schedule-list {
@@ -2025,6 +2045,17 @@ legend {
     max-height: 28vh;
   }
 
+  .schedule-form {
+    padding: 12px;
+    overflow: hidden;
+  }
+
+  .schedule-form input,
+  .schedule-form select,
+  .schedule-form .primary-action {
+    max-width: 100%;
+  }
+
   .stat-card {
     min-height: 82px;
   }
@@ -2085,5 +2116,17 @@ legend {
 
   .feedback-type-field {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .schedule-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-form > label,
+  .schedule-form .primary-action {
+    grid-column: 1 / -1;
+    min-width: 0;
   }
 }
