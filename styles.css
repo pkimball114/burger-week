@@ -346,6 +346,10 @@ main {
   box-shadow: 5px 5px 0 var(--ink);
 }
 
+.issue-banner[hidden] {
+  display: none;
+}
+
 .issue-banner strong {
   font-size: 1rem;
   font-weight: 950;
