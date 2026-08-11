@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=55">
+    <link rel="stylesheet" href="styles.css?v=57">
   </head>
   <body>
     <header class="hero">
@@ -283,7 +283,7 @@
         <div class="dialog-actions">
           <button class="ghost-button" type="button" id="logoutButton">Log Out</button>
           <div class="auth-submit-actions">
-            <button class="ghost-button test-login-button" type="button" id="testLoginButton">Continue as Test</button>
+            <button class="ghost-button test-login-button" type="button" id="testLoginButton" hidden>Continue as Test</button>
             <button class="ghost-button" type="submit" name="authIntent" value="signup">Create Account</button>
             <button class="primary-action" type="submit" name="authIntent" value="login">Log In</button>
           </div>
@@ -404,6 +404,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=56" defer></script>
+    <script src="app.js?v=57" defer></script>
   </body>
 </html>

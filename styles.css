@@ -692,6 +692,13 @@ legend {
   object-position: center;
 }
 
+@media (min-width: 721px) {
+  .review-photo-button.friend-photo-frame img {
+    object-fit: contain;
+    object-position: center center;
+  }
+}
+
 .placeholder-photo span {
   display: grid;
   place-items: center;
@@ -2029,6 +2036,10 @@ legend {
 
 .test-login-button {
   background: #e7f6ee;
+}
+
+.test-login-button[hidden] {
+  display: none;
 }
 
 .text-button {

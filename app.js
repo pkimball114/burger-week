@@ -872,7 +872,16 @@ function setAuthStatus(message) {
   renderAuth();
 }
 
+function isLocalTestEnvironment() {
+  return location.protocol === "file:" || ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+}
+
 async function continueAsTestUser() {
+  if (!isLocalTestEnvironment()) {
+    setAuthStatus("The Test user is only available during local development.");
+    return;
+  }
+
   if (isSupabaseReady()) {
     setAuthStatus("Log out first if you want to switch to the local Test user.");
     return;
@@ -1390,6 +1399,9 @@ function renderAuth() {
   els.authButton.textContent = account ? account.displayName : "Log In";
   els.authButton.classList.toggle("is-logged-in", Boolean(account));
   els.reviewerInput.value = account?.displayName || "";
+  if (els.testLoginButton) {
+    els.testLoginButton.hidden = !isLocalTestEnvironment();
+  }
   if (els.authStatus) {
     const fallbackStatus = hasUsableSupabaseConfig()
       ? "Use email and password to log in. New here? Choose Create Account."
@@ -1683,6 +1695,7 @@ function renderFeed() {
       const image = reviewImage(review);
       const hasToggle = Boolean(review.photo && review.burger.restaurantPhoto);
       const placeholderArt = image?.src?.includes("restaurant-placeholder.svg");
+      const friendPhoto = image?.source === "Friend photo";
       const deleteBusy = reviewActionBusy("delete", review.id);
       const editBusy = reviewActionBusy("edit", review.id);
       const showingDescription = reviewTextViewByReview[review.id] === "description";
@@ -1690,7 +1703,7 @@ function renderFeed() {
       const imageCaption = image ? `${review.burger.restaurant} - ${review.burger.burger} (${image.source})` : "";
       return `
         <article class="review-card">
-          <div class="photo-frame ${image ? "review-photo-button" : "placeholder-photo"} ${placeholderArt ? "placeholder-art" : ""}" ${image ? `role="button" tabindex="0" data-preview-review-photo="${escapeAttr(image.src)}" data-preview-alt="${escapeAttr(image.alt)}" data-preview-caption="${escapeAttr(imageCaption)}" aria-label="Open photo preview for ${escapeAttr(review.burger.restaurant)}"` : ""}>
+          <div class="photo-frame ${image ? "review-photo-button" : "placeholder-photo"} ${friendPhoto ? "friend-photo-frame" : ""} ${placeholderArt ? "placeholder-art" : ""}" ${image ? `role="button" tabindex="0" data-preview-review-photo="${escapeAttr(image.src)}" data-preview-alt="${escapeAttr(image.alt)}" data-preview-caption="${escapeAttr(imageCaption)}" aria-label="Open photo preview for ${escapeAttr(review.burger.restaurant)}"` : ""}>
             ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}">` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
             ${hasToggle ? `<button class="photo-toggle" type="button" data-photo-toggle="${escapeAttr(review.id)}" aria-label="Toggle restaurant photo">▣</button>` : ""}
             ${image ? `<span class="photo-source">${escapeHtml(image.source)}</span>` : ""}
