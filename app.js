@@ -63,6 +63,7 @@ const els = {
   resultCount: $("#resultCount"),
   mapPins: $("#mapPins"),
   mapList: $("#mapList"),
+  mapFullscreenToggle: $("#mapFullscreenToggle"),
   mapPopupOptions: $$("[data-map-popup-option]"),
   scheduleForm: $("#scheduleForm"),
   scheduleBurgerSelect: $("#scheduleBurgerSelect"),
@@ -152,6 +153,7 @@ let feedbackSubmitting = false;
 let pendingReviewActions = new Set();
 let burgerMap = null;
 let burgerMapMarkers = null;
+let mapFullscreen = false;
 let mapPopupOptions = {
   hours: true,
   image: false,
@@ -1963,6 +1965,15 @@ function mapPopupHtml(burger) {
   `;
 }
 
+function mapPopupSettings() {
+  return {
+    autoPan: false,
+    closeButton: true,
+    maxHeight: mapFullscreen ? Math.max(320, window.innerHeight - 180) : 320,
+    maxWidth: mapFullscreen ? 360 : 280
+  };
+}
+
 function createMapMarkerIcon(burger) {
   const initial = escapeHtml((burger.restaurant || "?").trim().charAt(0).toUpperCase() || "?");
   return L.divIcon({
@@ -2010,7 +2021,7 @@ function renderLeafletMap(mappedBurgers) {
       title: burger.restaurant,
       icon: createMapMarkerIcon(burger)
     })
-      .bindPopup(mapPopupHtml(burger))
+      .bindPopup(mapPopupHtml(burger), mapPopupSettings())
       .addTo(burgerMapMarkers);
   });
 
@@ -2021,6 +2032,21 @@ function renderLeafletMap(mappedBurgers) {
   }
 
   window.requestAnimationFrame(() => burgerMap.invalidateSize());
+}
+
+function setMapFullscreen(isFullscreen) {
+  mapFullscreen = Boolean(isFullscreen);
+  $("#mapView")?.classList.toggle("is-map-fullscreen", mapFullscreen);
+  document.body.classList.toggle("map-fullscreen-active", mapFullscreen);
+  if (els.mapFullscreenToggle) {
+    els.mapFullscreenToggle.textContent = mapFullscreen ? "Exit Full Screen" : "Full Screen Map";
+    els.mapFullscreenToggle.setAttribute("aria-pressed", String(mapFullscreen));
+    els.mapFullscreenToggle.setAttribute("aria-label", mapFullscreen ? "Exit full screen map" : "Open full screen map");
+  }
+  renderMap();
+  window.requestAnimationFrame(() => {
+    burgerMap?.invalidateSize();
+  });
 }
 
 function renderSchedule() {
@@ -2518,9 +2544,18 @@ els.mapPopupOptions.forEach((input) => input.addEventListener("change", (event) 
   renderMap();
 }));
 
+els.mapFullscreenToggle?.addEventListener("click", () => {
+  setMapFullscreen(!mapFullscreen);
+});
+
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 window.addEventListener("scroll", updateBackToSectionButton, { passive: true });
 window.addEventListener("resize", updateBackToSectionButton);
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && mapFullscreen) {
+    setMapFullscreen(false);
+  }
+});
 els.backToSection?.addEventListener("click", scrollToCurrentSectionHeading);
 
 els.controlsToggle.addEventListener("click", () => {

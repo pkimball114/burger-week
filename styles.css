@@ -260,7 +260,8 @@ h1 {
 .tab,
 .icon-button,
 .feedback-button,
-.auth-button {
+.auth-button,
+.map-fullscreen-toggle {
   min-height: 44px;
   border: var(--line);
   border-radius: 8px;
@@ -1189,6 +1190,54 @@ legend {
   gap: 18px;
 }
 
+.map-fullscreen-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 180px;
+  padding: 10px 14px;
+  background: var(--bun);
+}
+
+.map-fullscreen-active {
+  overflow: hidden;
+}
+
+#mapView.is-map-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+#mapView.is-map-fullscreen .section-heading {
+  align-items: center;
+  margin: 0;
+}
+
+#mapView.is-map-fullscreen .map-options {
+  margin-bottom: 0;
+}
+
+#mapView.is-map-fullscreen .map-shell {
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#mapView.is-map-fullscreen .portland-map {
+  height: 100%;
+  min-height: 0;
+}
+
+#mapView.is-map-fullscreen .map-list {
+  display: none;
+}
+
 .map-options {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -1299,6 +1348,15 @@ legend {
 
 .map-popup a {
   color: var(--ketchup-dark);
+}
+
+.portland-map .leaflet-popup-content {
+  max-height: min(48vh, 320px);
+  overflow: auto;
+}
+
+#mapView.is-map-fullscreen .leaflet-popup-content {
+  max-height: calc(100vh - 190px);
 }
 
 .map-popup p {
@@ -1901,6 +1959,28 @@ legend {
 
   .map-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .map-fullscreen-toggle {
+    width: 100%;
+  }
+
+  #mapView.is-map-fullscreen {
+    padding: 10px;
+    overflow: auto;
+  }
+
+  #mapView.is-map-fullscreen .map-shell {
+    grid-template-columns: 1fr;
+  }
+
+  #mapView.is-map-fullscreen .portland-map {
+    height: calc(100vh - 310px);
+    min-height: 360px;
+  }
+
+  #mapView.is-map-fullscreen .map-list {
+    max-height: 28vh;
   }
 
   .stat-card {

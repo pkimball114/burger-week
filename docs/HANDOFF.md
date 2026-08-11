@@ -159,7 +159,7 @@ Recent browser verification confirmed:
 - Hidden burgers are currently local-only and should become private per-user backend data when Supabase is connected.
 - `data/burger-week-2026.csv` currently has 124 Burger Week 2026 rows and should be treated as the source of truth unless the user provides a newer source file or asks for a correction.
 - The CSV has address, latitude/longitude, and maps URL coverage for all 124 rows.
-- The Map view uses Leaflet with all 124 CSV coordinates. Open now, Hide visited, search, and area filters update marker visibility, and map-local detail checkboxes customize popup content; see `docs/MAP.md`.
+- The Map view uses Leaflet with all 124 CSV coordinates. Open now, Hide visited, search, and area filters update marker visibility, map-local detail checkboxes customize popup content, and a full-screen mode makes dense map navigation easier; see `docs/MAP.md`.
 
 ## Best Next Tasks
 
