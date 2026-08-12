@@ -157,6 +157,7 @@ let currentViewName = "feed";
 let statsScope = "personal";
 let wantedStatIndex = 0;
 let reviewTextViewByReview = {};
+let expandedCommentsByReview = {};
 let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
@@ -1883,6 +1884,7 @@ async function addReviewComment(reviewId, body) {
     body: trimmedBody,
     createdAt: new Date().toISOString()
   };
+  expandedCommentsByReview[reviewId] = true;
 
   if (isSupabaseReady() && supabaseReviewCommentsSupported) {
     const { error } = await supabaseClient.from("review_comments").insert({
@@ -2247,6 +2249,7 @@ function renderFeed() {
       const likes = reviewLikeEntries(review.id);
       const liked = accountLikedReview(review.id);
       const comments = reviewCommentEntries(review.id);
+      const commentsExpanded = Boolean(expandedCommentsByReview[review.id]);
       const account = getAccount();
       return `
         <article class="review-card ${activeFeedReviewId === review.id ? "is-highlighted" : ""}" id="review-card-${escapeAttr(review.id)}" data-review-card="${escapeAttr(review.id)}" tabindex="-1">
@@ -2298,36 +2301,41 @@ function renderFeed() {
             ` : ""}
             <div class="reaction-panel">
               <div class="reaction-actions">
-                <button class="like-button ${liked ? "is-liked" : ""}" type="button" data-like-review="${escapeAttr(review.id)}" aria-pressed="${liked}">
+                <button class="like-button ${liked ? "is-liked" : ""}" type="button" data-like-review="${escapeAttr(review.id)}" aria-pressed="${liked}" aria-label="${liked ? "Unlike" : "Like"} review by ${escapeAttr(review.reviewer)}">
                   <span aria-hidden="true">${liked ? "♥" : "♡"}</span>
                   <b>${likes.length}</b>
-                  <span>${likes.length === 1 ? "Like" : "Likes"}</span>
                 </button>
-                <span>${comments.length} comment${comments.length === 1 ? "" : "s"}</span>
+                <button class="comment-toggle" type="button" data-toggle-comments="${escapeAttr(review.id)}" aria-expanded="${commentsExpanded}">
+                  ${comments.length} comment${comments.length === 1 ? "" : "s"}
+                </button>
               </div>
-              ${comments.length ? `
-                <div class="comment-list">
-                  ${comments.map((comment) => `
-                    <article class="comment-item">
-                      <div>
-                        <strong>${escapeHtml(comment.displayName)}</strong>
-                        <time datetime="${escapeAttr(comment.createdAt)}">${escapeHtml(timestampFormatter.format(new Date(comment.createdAt)))}</time>
-                      </div>
-                      <p>${escapeHtml(comment.body)}</p>
-                      ${account && comment.profileId === account.id ? `<button class="text-button comment-delete-button" type="button" data-delete-comment="${escapeAttr(comment.id)}">Delete</button>` : ""}
-                    </article>
-                  `).join("")}
+              ${commentsExpanded ? `
+                <div class="comment-panel">
+                  ${comments.length ? `
+                    <div class="comment-list">
+                      ${comments.map((comment) => `
+                        <article class="comment-item">
+                          <div>
+                            <strong>${escapeHtml(comment.displayName)}</strong>
+                            <time datetime="${escapeAttr(comment.createdAt)}">${escapeHtml(timestampFormatter.format(new Date(comment.createdAt)))}</time>
+                          </div>
+                          <p>${escapeHtml(comment.body)}</p>
+                          ${account && comment.profileId === account.id ? `<button class="text-button comment-delete-button" type="button" data-delete-comment="${escapeAttr(comment.id)}">Delete</button>` : ""}
+                        </article>
+                      `).join("")}
+                    </div>
+                  ` : `<p class="comment-empty">No comments yet.</p>`}
+                  ${account ? `
+                    <form class="comment-form" data-comment-form="${escapeAttr(review.id)}">
+                      <label>
+                        <span>Comment</span>
+                        <input name="comment" placeholder="Add a quick thought" autocomplete="off">
+                      </label>
+                      <button class="ghost-button compact-button" type="submit">Post</button>
+                    </form>
+                  ` : `<button class="text-button" type="button" data-login-for-comment>Log in to comment.</button>`}
                 </div>
               ` : ""}
-              ${account ? `
-                <form class="comment-form" data-comment-form="${escapeAttr(review.id)}">
-                  <label>
-                    <span>Comment</span>
-                    <input name="comment" placeholder="Add a quick thought" autocomplete="off">
-                  </label>
-                  <button class="ghost-button compact-button" type="submit">Post</button>
-                </form>
-              ` : `<button class="text-button" type="button" data-login-for-comment>Log in to comment.</button>`}
             </div>
           </div>
         </article>
@@ -3799,6 +3807,7 @@ els.reviewGrid.addEventListener("click", (event) => {
   const editReviewButton = event.target.closest("[data-edit-review]");
   const deleteReviewButton = event.target.closest("[data-delete-review]");
   const likeReviewButton = event.target.closest("[data-like-review]");
+  const toggleCommentsButton = event.target.closest("[data-toggle-comments]");
   const deleteCommentButton = event.target.closest("[data-delete-comment]");
   const loadMoreButton = event.target.closest("[data-load-more-feed]");
   const loginForCommentButton = event.target.closest("[data-login-for-comment]");
@@ -3817,6 +3826,13 @@ els.reviewGrid.addEventListener("click", (event) => {
 
   if (likeReviewButton) {
     toggleReviewLike(likeReviewButton.dataset.likeReview);
+    return;
+  }
+
+  if (toggleCommentsButton) {
+    const reviewId = toggleCommentsButton.dataset.toggleComments;
+    expandedCommentsByReview[reviewId] = !expandedCommentsByReview[reviewId];
+    renderFeed();
     return;
   }
 
