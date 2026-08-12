@@ -718,6 +718,10 @@ legend {
   object-position: center;
 }
 
+.review-photo-button.friend-photo-frame.is-portrait-photo img {
+  object-position: center 62%;
+}
+
 .photo-frame.placeholder-art img {
   width: min(78%, 250px);
   height: min(78%, 250px);

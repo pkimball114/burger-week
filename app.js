@@ -2340,6 +2340,23 @@ function reviewImage(review) {
   return null;
 }
 
+function markFeedPhotoOrientation(image) {
+  const frame = image?.closest?.(".review-photo-button.friend-photo-frame");
+  if (!frame || !image.naturalWidth || !image.naturalHeight) return;
+
+  const isPortrait = image.naturalHeight > image.naturalWidth * 1.05;
+  frame.classList.toggle("is-portrait-photo", isPortrait);
+  frame.classList.toggle("is-landscape-photo", !isPortrait);
+}
+
+function markRenderedFeedPhotoOrientations() {
+  els.reviewGrid
+    ?.querySelectorAll(".review-photo-button.friend-photo-frame img")
+    .forEach((image) => {
+      if (image.complete) markFeedPhotoOrientation(image);
+    });
+}
+
 function resetFeedPagination() {
   feedVisibleCount = feedPageSize;
   activeFeedReviewId = "";
@@ -2478,6 +2495,7 @@ function renderFeed() {
         <button class="ghost-button compact-button" type="button" data-load-more-feed>Load More</button>
       </div>
     ` : ""}`;
+  requestAnimationFrame(markRenderedFeedPhotoOrientations);
 }
 
 function burgerReviewStats(burgerId) {
@@ -4026,6 +4044,12 @@ els.reviewGrid.addEventListener("submit", async (event) => {
   const posted = await addReviewComment(commentForm.dataset.commentForm, input.value);
   if (posted) input.value = "";
 });
+
+els.reviewGrid.addEventListener("load", (event) => {
+  if (event.target instanceof HTMLImageElement) {
+    markFeedPhotoOrientation(event.target);
+  }
+}, true);
 
 els.reviewGrid.addEventListener("keydown", (event) => {
   if (!["Enter", " "].includes(event.key)) return;
