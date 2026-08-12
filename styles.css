@@ -1078,6 +1078,104 @@ legend {
   padding: 8px;
 }
 
+.leaderboard-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.leaderboard-panel,
+.leaderboard-award {
+  background: var(--plate);
+  border: var(--line);
+  border-radius: 8px;
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.leaderboard-panel {
+  padding: 14px;
+}
+
+.leaderboard-panel h3,
+.leaderboard-panel-heading h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.leaderboard-panel > h3 {
+  margin-bottom: 12px;
+}
+
+.leaderboard-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.leaderboard-awards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.leaderboard-award {
+  display: grid;
+  gap: 6px;
+  min-height: 112px;
+  padding: 14px;
+}
+
+.leaderboard-award span {
+  color: #6a5448;
+  font-weight: 900;
+}
+
+.leaderboard-award strong {
+  align-self: end;
+  font-size: 1.35rem;
+  line-height: 1.05;
+}
+
+.leaderboard-table-wrap {
+  overflow-x: auto;
+}
+
+.leaderboard-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  border-bottom: 2px solid rgba(37, 25, 20, 0.18);
+  padding: 10px 8px;
+  vertical-align: top;
+}
+
+.leaderboard-table th {
+  color: #6a5448;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.leaderboard-table td {
+  font-weight: 850;
+}
+
+.leaderboard-table td:first-child,
+.leaderboard-table td:nth-child(3) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.leaderboard-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .burger-list {
   display: grid;
   gap: 14px;
@@ -2339,6 +2437,7 @@ legend {
   .schedule-form,
   .schedule-item,
   .comment-form,
+  .leaderboard-awards,
   .review-grid,
   .map-shell,
   .map-options,

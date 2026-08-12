@@ -26,6 +26,7 @@ const reviewPhotoMaxDimension = 1600;
 const reviewPhotoJpegQuality = 0.82;
 const feedPortraitFriendPhotoObjectPosition = "center 45%";
 const feedPageSize = 12;
+const leaderboardDefaultVisibleCount = 10;
 const testAccount = {
   id: "local-test-user",
   displayName: "Test",
@@ -88,6 +89,10 @@ const els = {
   scheduleStatusSelect: $("#scheduleStatusSelect"),
   scheduleNoteInput: $("#scheduleNoteInput"),
   scheduleList: $("#scheduleList"),
+  leaderboardTopThree: $("#leaderboardTopThree"),
+  leaderboardAwards: $("#leaderboardAwards"),
+  leaderboardTable: $("#leaderboardTable"),
+  leaderboardToggle: $("#leaderboardToggle"),
   closeScheduleForm: $("#closeScheduleForm"),
   cancelScheduleStop: $("#cancelScheduleStop"),
   backToSection: $("#backToSection"),
@@ -209,6 +214,7 @@ let filters = {
 };
 let feedVisibleCount = feedPageSize;
 let activeFeedReviewId = "";
+let leaderboardExpanded = false;
 
 function fallbackEvent() {
   const dates = ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-16"];
@@ -1536,6 +1542,7 @@ function renderBurgerBoardState() {
   renderHypeList();
   renderBurgerList();
   renderMap();
+  renderLeaderboard();
 }
 
 async function initializeSupabase() {
@@ -2152,6 +2159,13 @@ function summarizeReviews(reviews) {
   };
 }
 
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 function formatRating(value) {
   return Number(value).toFixed(2);
 }
@@ -2357,6 +2371,165 @@ function markRenderedFeedPhotoOrientations() {
     .forEach((image) => {
       if (image.complete) markFeedPhotoOrientation(image);
     });
+}
+
+function reviewerLeaderboardKey(review) {
+  return review.profileId || `reviewer:${review.reviewer}`;
+}
+
+function reviewNoteLength(review) {
+  return stripWaitTimeFallback(review.notes || "").replace(/\s+/g, " ").trim().length;
+}
+
+function buildLeaderboardData() {
+  const reviews = getReviews().filter((review) => Number.isFinite(Number(review.rating)));
+  const burgerRatings = {};
+  reviews.forEach((review) => {
+    burgerRatings[review.burgerId] ||= [];
+    burgerRatings[review.burgerId].push(Number(review.rating));
+  });
+  const burgerMedians = Object.fromEntries(
+    Object.entries(burgerRatings).map(([burgerId, ratings]) => [burgerId, median(ratings)])
+  );
+
+  const byReviewer = new Map();
+  reviews.forEach((review) => {
+    const key = reviewerLeaderboardKey(review);
+    if (!byReviewer.has(key)) {
+      byReviewer.set(key, {
+        key,
+        name: review.reviewer || "Burger friend",
+        reviewCount: 0,
+        ratingTotal: 0,
+        noteLength: 0,
+        highestReview: null,
+        deviationTotal: 0,
+        deviationCount: 0
+      });
+    }
+
+    const entry = byReviewer.get(key);
+    const rating = Number(review.rating);
+    entry.name = review.reviewer || entry.name;
+    entry.reviewCount += 1;
+    entry.ratingTotal += rating;
+    entry.noteLength += reviewNoteLength(review);
+    if (
+      !entry.highestReview ||
+      rating > Number(entry.highestReview.rating) ||
+      (rating === Number(entry.highestReview.rating) && new Date(review.createdAt) > new Date(entry.highestReview.createdAt))
+    ) {
+      entry.highestReview = review;
+    }
+
+    if (Number.isFinite(burgerMedians[review.burgerId])) {
+      entry.deviationTotal += Math.abs(rating - burgerMedians[review.burgerId]);
+      entry.deviationCount += 1;
+    }
+  });
+
+  const connoisseurs = [...byReviewer.values()]
+    .map((entry) => ({
+      ...entry,
+      averageRating: entry.reviewCount ? entry.ratingTotal / entry.reviewCount : 0,
+      averageDeviation: entry.deviationCount ? entry.deviationTotal / entry.deviationCount : 0
+    }))
+    .sort((a, b) =>
+      b.reviewCount - a.reviewCount ||
+      b.averageRating - a.averageRating ||
+      a.name.localeCompare(b.name)
+    );
+
+  const mostOutspoken = [...connoisseurs].sort((a, b) =>
+    b.noteLength - a.noteLength ||
+    b.reviewCount - a.reviewCount ||
+    a.name.localeCompare(b.name)
+  )[0] || null;
+  const mostControversial = [...connoisseurs]
+    .filter((entry) => entry.deviationCount && entry.averageDeviation > 0)
+    .sort((a, b) =>
+      b.averageDeviation - a.averageDeviation ||
+      b.reviewCount - a.reviewCount ||
+      a.name.localeCompare(b.name)
+    )[0] || null;
+
+  return {
+    connoisseurs,
+    topThree: connoisseurs.slice(0, 3),
+    mostOutspoken,
+    mostControversial
+  };
+}
+
+function highestBurgerLabel(review) {
+  if (!review) return "-";
+  return `${review.burger.restaurant} - ${review.burger.burger}`;
+}
+
+function renderLeaderboardRankTable(rows, { includeBurger = false } = {}) {
+  if (!rows.length) {
+    return `
+      <div class="empty-state">
+        <h3>No reviews yet.</h3>
+        <p>Post a review to start the leaderboard.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <table class="leaderboard-table">
+      <thead>
+        <tr>
+          <th scope="col">Rank</th>
+          <th scope="col">Connoisseur</th>
+          <th scope="col">Reviews</th>
+          ${includeBurger ? `<th scope="col">Highest Ranked Burger</th>` : ""}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((entry, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(entry.name)}</td>
+            <td>${entry.reviewCount}</td>
+            ${includeBurger ? `<td>${escapeHtml(highestBurgerLabel(entry.highestReview))}</td>` : ""}
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderLeaderboardAward(title, entry) {
+  return `
+    <article class="leaderboard-award">
+      <span>${escapeHtml(title)}</span>
+      <strong>${escapeHtml(entry?.name || "No Reviews Yet")}</strong>
+    </article>
+  `;
+}
+
+function renderLeaderboard() {
+  if (!els.leaderboardTopThree || !els.leaderboardAwards || !els.leaderboardTable) return;
+
+  const leaderboard = buildLeaderboardData();
+  const visibleConnoisseurs = leaderboardExpanded
+    ? leaderboard.connoisseurs
+    : leaderboard.connoisseurs.slice(0, leaderboardDefaultVisibleCount);
+
+  els.leaderboardTopThree.innerHTML = renderLeaderboardRankTable(leaderboard.topThree);
+  els.leaderboardAwards.innerHTML = [
+    renderLeaderboardAward("Most Outspoken Eater", leaderboard.mostOutspoken),
+    renderLeaderboardAward("Most Controversial", leaderboard.mostControversial)
+  ].join("");
+  els.leaderboardTable.innerHTML = renderLeaderboardRankTable(visibleConnoisseurs, { includeBurger: true });
+
+  if (els.leaderboardToggle) {
+    const canExpand = leaderboard.connoisseurs.length > leaderboardDefaultVisibleCount;
+    els.leaderboardToggle.hidden = !canExpand;
+    els.leaderboardToggle.textContent = leaderboardExpanded ? "Show Top 10" : "Show All";
+    els.leaderboardToggle.setAttribute("aria-expanded", String(leaderboardExpanded));
+  }
 }
 
 function resetFeedPagination() {
@@ -3156,6 +3329,7 @@ function renderAll() {
   renderBurgerList();
   renderMap();
   renderSchedule();
+  renderLeaderboard();
   renderStarInput();
   updateBackToSectionButton();
 }
@@ -3642,6 +3816,11 @@ els.tabs.forEach((tab) => tab.addEventListener("click", () => {
   showView(tab.dataset.view);
   if (tab.dataset.view === "feed") maybeLoadMoreFeed();
 }));
+
+els.leaderboardToggle?.addEventListener("click", () => {
+  leaderboardExpanded = !leaderboardExpanded;
+  renderLeaderboard();
+});
 window.addEventListener("scroll", () => {
   updateBackToSectionButton();
   maybeLoadMoreFeed();

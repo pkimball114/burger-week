@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=73">
+    <link rel="stylesheet" href="styles.css?v=74">
   </head>
   <body>
     <header class="hero">
@@ -104,6 +104,7 @@
           <button class="tab" type="button" data-view="burgers" role="tab" aria-selected="false">Burgers</button>
           <button class="tab" type="button" data-view="map" role="tab" aria-selected="false">Map</button>
           <button class="tab" type="button" data-view="calendar" role="tab" aria-selected="false">Schedule</button>
+          <button class="tab" type="button" data-view="leaderboard" role="tab" aria-selected="false">Leaderboard</button>
         </div>
       </section>
 
@@ -202,6 +203,26 @@
         </div>
         <div class="schedule-day-tabs" id="scheduleDayTabs" role="tablist" aria-label="Schedule days"></div>
         <div class="schedule-list" id="scheduleList"></div>
+      </section>
+
+      <section id="leaderboardView" class="view" aria-labelledby="leaderboardTitle">
+        <div class="section-heading">
+          <h2 id="leaderboardTitle">Leaderboard</h2>
+        </div>
+        <div class="leaderboard-stack">
+          <div class="leaderboard-panel">
+            <h3>Top 3 Connoisseurs</h3>
+            <div class="leaderboard-table-wrap" id="leaderboardTopThree"></div>
+          </div>
+          <div class="leaderboard-awards" id="leaderboardAwards"></div>
+          <div class="leaderboard-panel">
+            <div class="leaderboard-panel-heading">
+              <h3>Top Connoisseurs</h3>
+              <button class="ghost-button compact-button" id="leaderboardToggle" type="button" aria-expanded="false" hidden>Show All</button>
+            </div>
+            <div class="leaderboard-table-wrap" id="leaderboardTable"></div>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -417,6 +438,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=73" defer></script>
+    <script src="app.js?v=74" defer></script>
   </body>
 </html>
