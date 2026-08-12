@@ -19,9 +19,12 @@ const hiddenStoreKey = "burger-week-hidden-v1";
 const waitReportStoreKey = "burger-week-wait-reports-v1";
 const scheduleStoreKey = "burger-week-schedule-v1";
 const feedbackStoreKey = "burger-week-feedback-v1";
+const reviewLikeStoreKey = "burger-week-review-likes-v1";
+const reviewCommentStoreKey = "burger-week-review-comments-v1";
 const supabasePhotoBucket = "burger-review-photos";
 const reviewPhotoMaxDimension = 1600;
 const reviewPhotoJpegQuality = 0.82;
+const feedPageSize = 12;
 const testAccount = {
   id: "local-test-user",
   displayName: "Test",
@@ -62,6 +65,7 @@ const els = {
   sortSelect: $("#sortSelect"),
   openNowFilter: $("#openNowFilter"),
   hideVisitedFilter: $("#hideVisitedFilter"),
+  wantScopeFilter: $("#wantScopeFilter"),
   tabs: $$(".tab"),
   views: $$(".view"),
   reviewGrid: $("#reviewGrid"),
@@ -73,6 +77,7 @@ const els = {
   mapFullscreenToggle: $("#mapFullscreenToggle"),
   mapPopupOptions: $$("[data-map-popup-option]"),
   scheduleDialog: $("#scheduleDialog"),
+  scheduleOwnerFilter: $("#scheduleOwnerFilter"),
   scheduleDayTabs: $("#scheduleDayTabs"),
   openScheduleForm: $("#openScheduleForm"),
   scheduleForm: $("#scheduleForm"),
@@ -147,6 +152,7 @@ let activeWaitBurgerId = "";
 let controlsCollapsed = false;
 let hypeCollapsed = false;
 let selectedScheduleDate = "";
+let selectedScheduleProfileId = "";
 let currentViewName = "feed";
 let statsScope = "personal";
 let wantedStatIndex = 0;
@@ -155,11 +161,17 @@ let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
 let supabaseReviewWaitTimeSupported = true;
+let supabaseReviewLikesSupported = true;
+let supabaseReviewCommentsSupported = true;
+let supabaseSchedulesSupported = true;
 let passwordRecoveryMode = false;
 let authStatusMessage = "";
 let remoteReviewsByEvent = {};
 let remoteWantsByEvent = {};
 let remoteHiddenByEvent = {};
+let remoteReviewLikesByEvent = {};
+let remoteReviewCommentsByEvent = {};
+let remoteSchedulesByEvent = {};
 let appStatusTimer = 0;
 let activeReviewEditId = "";
 let reviewBurgerSelection = "";
@@ -168,6 +180,8 @@ let feedbackSubmitting = false;
 let pendingReviewActions = new Set();
 let burgerMap = null;
 let burgerMapMarkers = null;
+let burgerMapMarkerById = new Map();
+let activeMapBurgerId = "";
 let mapFullscreen = false;
 let mapPopupOptions = {
   hours: true,
@@ -184,8 +198,11 @@ let filters = {
   rating: 0,
   sort: "recent",
   openNow: false,
-  hideVisited: false
+  hideVisited: false,
+  wantScope: "all"
 };
+let feedVisibleCount = feedPageSize;
+let activeFeedReviewId = "";
 
 function fallbackEvent() {
   const dates = ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-16"];
@@ -407,10 +424,20 @@ function deleteWaitReport(burgerId) {
 function accountScheduleEntries() {
   const account = getAccount();
   if (!account) return [];
-  return Object.values(loadJsonStore(scheduleStoreKey)[currentEventId]?.[account.id] || {});
+  return eventScheduleEntries().filter((entry) => entry.profileId === account.id);
 }
 
-function saveScheduleEntry(entry) {
+function localScheduleEntriesForEvent() {
+  const eventStore = loadJsonStore(scheduleStoreKey)[currentEventId] || {};
+  return Object.values(eventStore).flatMap((bucket) => Object.values(bucket || {}));
+}
+
+function eventScheduleEntries() {
+  if (isSupabaseReady() && supabaseSchedulesSupported) return remoteSchedulesByEvent[currentEventId] || [];
+  return localScheduleEntriesForEvent();
+}
+
+function saveLocalScheduleEntry(entry) {
   const account = getAccount();
   if (!account) return false;
   const store = loadJsonStore(scheduleStoreKey);
@@ -420,7 +447,37 @@ function saveScheduleEntry(entry) {
   return true;
 }
 
-function deleteScheduleEntry(entryId) {
+async function saveScheduleEntry(entry) {
+  if (isSupabaseReady() && supabaseSchedulesSupported) {
+    const { error } = await supabaseClient.from("schedule_entries").insert({
+      id: entry.id,
+      event_id: entry.eventId,
+      food_item_id: entry.burgerId,
+      profile_id: entry.profileId,
+      visit_date: entry.date,
+      visit_time: entry.time,
+      status: entry.status,
+      note: entry.note,
+      created_at: entry.createdAt
+    });
+
+    if (error) {
+      if (supabaseMissingRelationError(error, "schedule_entries")) {
+        supabaseSchedulesSupported = false;
+        showAppStatus("Schedules saved locally until the shared schedule table is available.", true);
+        return saveLocalScheduleEntry(entry);
+      }
+      throw error;
+    }
+
+    await loadSupabaseSchedules();
+    return true;
+  }
+
+  return saveLocalScheduleEntry(entry);
+}
+
+function deleteLocalScheduleEntry(entryId) {
   const account = getAccount();
   if (!account) return;
   const store = loadJsonStore(scheduleStoreKey);
@@ -428,6 +485,33 @@ function deleteScheduleEntry(entryId) {
     delete store[currentEventId][account.id][entryId];
     saveJsonStore(scheduleStoreKey, store);
   }
+}
+
+async function deleteScheduleEntry(entryId) {
+  const account = getAccount();
+  if (!account) return;
+
+  if (isSupabaseReady() && supabaseSchedulesSupported) {
+    const { error } = await supabaseClient
+      .from("schedule_entries")
+      .delete()
+      .eq("id", entryId)
+      .eq("profile_id", account.id);
+
+    if (error) {
+      if (supabaseMissingRelationError(error, "schedule_entries")) {
+        supabaseSchedulesSupported = false;
+        deleteLocalScheduleEntry(entryId);
+        return;
+      }
+      throw error;
+    }
+
+    await loadSupabaseSchedules();
+    return;
+  }
+
+  deleteLocalScheduleEntry(entryId);
 }
 
 function saveLocalFeedbackReport(report) {
@@ -484,6 +568,17 @@ function dateTimePartsFromTimestamp(timestamp) {
 function supabaseMissingColumnError(error, columnName) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
   return error?.code === "PGRST204" || message.includes(columnName.toLowerCase());
+}
+
+function supabaseMissingRelationError(error, relationName) {
+  const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+  const relation = relationName.toLowerCase();
+  return (
+    ["42P01", "PGRST106", "PGRST205", "42501"].includes(error?.code) ||
+    message.includes(relation) ||
+    message.includes("could not find") ||
+    message.includes("permission denied")
+  );
 }
 
 function parseCsv(text) {
@@ -1083,11 +1178,105 @@ async function loadSupabaseHidden() {
   });
 }
 
+async function loadSupabaseReviewLikes() {
+  if (!supabaseReviewLikesSupported) return;
+  const { data, error } = await supabaseClient
+    .from("review_likes")
+    .select("event_id,review_id,profile_id,created_at,profiles(display_name)")
+    .eq("event_id", currentEventId);
+
+  if (error) {
+    if (supabaseMissingRelationError(error, "review_likes")) {
+      supabaseReviewLikesSupported = false;
+      return;
+    }
+    throw error;
+  }
+
+  remoteReviewLikesByEvent[currentEventId] = {};
+  (data || []).forEach((like) => {
+    remoteReviewLikesByEvent[currentEventId][like.review_id] ||= {};
+    remoteReviewLikesByEvent[currentEventId][like.review_id][like.profile_id] = {
+      displayName: like.profiles?.display_name || "Burger friend",
+      createdAt: like.created_at
+    };
+  });
+}
+
+async function loadSupabaseReviewComments() {
+  if (!supabaseReviewCommentsSupported) return;
+  const { data, error } = await supabaseClient
+    .from("review_comments")
+    .select("id,event_id,review_id,profile_id,body,created_at,profiles(display_name)")
+    .eq("event_id", currentEventId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    if (supabaseMissingRelationError(error, "review_comments")) {
+      supabaseReviewCommentsSupported = false;
+      return;
+    }
+    throw error;
+  }
+
+  remoteReviewCommentsByEvent[currentEventId] = {};
+  (data || []).forEach((comment) => {
+    remoteReviewCommentsByEvent[currentEventId][comment.review_id] ||= {};
+    remoteReviewCommentsByEvent[currentEventId][comment.review_id][comment.id] = {
+      id: comment.id,
+      eventId: comment.event_id,
+      reviewId: comment.review_id,
+      profileId: comment.profile_id,
+      displayName: comment.profiles?.display_name || "Burger friend",
+      body: comment.body || "",
+      createdAt: comment.created_at
+    };
+  });
+}
+
+async function loadSupabaseSchedules() {
+  if (!supabaseSchedulesSupported) return;
+  const { data, error } = await supabaseClient
+    .from("schedule_entries")
+    .select("id,event_id,food_item_id,profile_id,visit_date,visit_time,status,note,created_at,profiles(display_name)")
+    .eq("event_id", currentEventId)
+    .order("visit_date", { ascending: true })
+    .order("visit_time", { ascending: true });
+
+  if (error) {
+    if (supabaseMissingRelationError(error, "schedule_entries")) {
+      supabaseSchedulesSupported = false;
+      return;
+    }
+    throw error;
+  }
+
+  remoteSchedulesByEvent[currentEventId] = (data || []).map((entry) => ({
+    id: entry.id,
+    eventId: entry.event_id,
+    burgerId: entry.food_item_id,
+    profileId: entry.profile_id,
+    displayName: entry.profiles?.display_name || "Burger friend",
+    date: entry.visit_date,
+    time: String(entry.visit_time || "").slice(0, 5),
+    status: entry.status || "planned",
+    note: entry.note || "",
+    createdAt: entry.created_at
+  }));
+}
+
 async function refreshSupabaseData() {
   if (!isSupabaseReady()) return;
 
   try {
-    await Promise.all([loadSupabaseReviews(), loadSupabaseWants(), loadSupabaseHidden()]);
+    await Promise.all([
+      loadSupabaseReviews(),
+      loadSupabaseWants(),
+      loadSupabaseHidden(),
+      loadSupabaseReviewLikes(),
+      loadSupabaseReviewComments(),
+      loadSupabaseSchedules()
+    ]);
     setAuthStatus("Shared Supabase mode is active.");
   } catch (error) {
     setAuthStatus(`Supabase sync failed: ${error.message}`);
@@ -1150,6 +1339,9 @@ async function initializeSupabase() {
       remoteReviewsByEvent = {};
       remoteWantsByEvent = {};
       remoteHiddenByEvent = {};
+      remoteReviewLikesByEvent = {};
+      remoteReviewCommentsByEvent = {};
+      remoteSchedulesByEvent = {};
       setAuthStatus("Signed out. Log in with email and password when you are ready.");
     }
     renderAll();
@@ -1423,6 +1615,224 @@ function saveLocalReviews(allReviews) {
   localStorage.setItem(reviewStoreKey, JSON.stringify(allReviews));
 }
 
+function loadReviewLikes() {
+  return loadJsonStore(reviewLikeStoreKey);
+}
+
+function saveReviewLikes(likes) {
+  saveJsonStore(reviewLikeStoreKey, likes);
+}
+
+function loadReviewComments() {
+  return loadJsonStore(reviewCommentStoreKey);
+}
+
+function saveReviewComments(comments) {
+  saveJsonStore(reviewCommentStoreKey, comments);
+}
+
+function eventReviewLikes() {
+  if (isSupabaseReady() && supabaseReviewLikesSupported) return remoteReviewLikesByEvent[currentEventId] || {};
+  return loadReviewLikes()[currentEventId] || {};
+}
+
+function eventReviewComments() {
+  if (isSupabaseReady() && supabaseReviewCommentsSupported) return remoteReviewCommentsByEvent[currentEventId] || {};
+  return loadReviewComments()[currentEventId] || {};
+}
+
+function reviewLikeEntries(reviewId) {
+  return Object.values(eventReviewLikes()[reviewId] || {});
+}
+
+function reviewCommentEntries(reviewId) {
+  return Object.values(eventReviewComments()[reviewId] || {}).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+}
+
+function accountLikedReview(reviewId) {
+  const account = getAccount();
+  if (!account) return false;
+  return Boolean(eventReviewLikes()[reviewId]?.[account.id]);
+}
+
+function setRemoteReviewLike(eventId, reviewId, account, entry) {
+  remoteReviewLikesByEvent[eventId] ||= {};
+  remoteReviewLikesByEvent[eventId][reviewId] ||= {};
+  if (entry) {
+    remoteReviewLikesByEvent[eventId][reviewId][account.id] = entry;
+    return;
+  }
+
+  delete remoteReviewLikesByEvent[eventId][reviewId][account.id];
+  if (!Object.keys(remoteReviewLikesByEvent[eventId][reviewId]).length) {
+    delete remoteReviewLikesByEvent[eventId][reviewId];
+  }
+}
+
+function setLocalReviewLike(reviewId, account, entry) {
+  const likes = loadReviewLikes();
+  likes[currentEventId] ||= {};
+  likes[currentEventId][reviewId] ||= {};
+  if (entry) {
+    likes[currentEventId][reviewId][account.id] = entry;
+  } else {
+    delete likes[currentEventId][reviewId][account.id];
+  }
+  if (!Object.keys(likes[currentEventId][reviewId]).length) {
+    delete likes[currentEventId][reviewId];
+  }
+  saveReviewLikes(likes);
+}
+
+async function toggleReviewLike(reviewId) {
+  const account = getAccount();
+  if (!account) {
+    els.loginDialog.showModal();
+    return;
+  }
+
+  const liked = accountLikedReview(reviewId);
+  const nextEntry = liked ? null : {
+    displayName: account.displayName,
+    createdAt: new Date().toISOString()
+  };
+
+  if (isSupabaseReady() && supabaseReviewLikesSupported) {
+    const previousEntry = remoteReviewLikesByEvent[currentEventId]?.[reviewId]?.[account.id] || null;
+    setRemoteReviewLike(currentEventId, reviewId, account, nextEntry);
+    renderFeed();
+
+    const { error } = liked
+      ? await supabaseClient
+          .from("review_likes")
+          .delete()
+          .eq("event_id", currentEventId)
+          .eq("review_id", reviewId)
+          .eq("profile_id", account.id)
+      : await supabaseClient.from("review_likes").insert({
+          event_id: currentEventId,
+          review_id: reviewId,
+          profile_id: account.id
+        });
+
+    if (error && error.code !== "23505") {
+      setRemoteReviewLike(currentEventId, reviewId, account, previousEntry);
+      if (supabaseMissingRelationError(error, "review_likes")) {
+        supabaseReviewLikesSupported = false;
+        setLocalReviewLike(reviewId, account, nextEntry);
+        showAppStatus("Likes saved locally until the shared likes table is available.", true);
+      } else {
+        showAppStatus(`Could not update like: ${error.message}`, true);
+      }
+    }
+
+    renderFeed();
+    return;
+  }
+
+  setLocalReviewLike(reviewId, account, nextEntry);
+  renderFeed();
+}
+
+function setLocalReviewComment(comment) {
+  const comments = loadReviewComments();
+  comments[currentEventId] ||= {};
+  comments[currentEventId][comment.reviewId] ||= {};
+  comments[currentEventId][comment.reviewId][comment.id] = comment;
+  saveReviewComments(comments);
+}
+
+function deleteLocalReviewComment(commentId) {
+  const comments = loadReviewComments();
+  const eventComments = comments[currentEventId] || {};
+  Object.values(eventComments).forEach((reviewComments) => {
+    if (reviewComments?.[commentId]) delete reviewComments[commentId];
+  });
+  saveReviewComments(comments);
+}
+
+async function addReviewComment(reviewId, body) {
+  const account = getAccount();
+  const trimmedBody = body.trim();
+  if (!account) {
+    els.loginDialog.showModal();
+    return false;
+  }
+  if (!trimmedBody) return false;
+
+  const comment = {
+    id: crypto.randomUUID(),
+    eventId: currentEventId,
+    reviewId,
+    profileId: account.id,
+    displayName: account.displayName,
+    body: trimmedBody,
+    createdAt: new Date().toISOString()
+  };
+
+  if (isSupabaseReady() && supabaseReviewCommentsSupported) {
+    const { error } = await supabaseClient.from("review_comments").insert({
+      id: comment.id,
+      event_id: currentEventId,
+      review_id: reviewId,
+      profile_id: account.id,
+      body: trimmedBody,
+      created_at: comment.createdAt
+    });
+
+    if (error) {
+      if (supabaseMissingRelationError(error, "review_comments")) {
+        supabaseReviewCommentsSupported = false;
+        setLocalReviewComment(comment);
+        showAppStatus("Comment saved locally until the shared comments table is available.", true);
+        renderFeed();
+        return true;
+      }
+      showAppStatus(`Could not post comment: ${error.message}`, true);
+      return false;
+    }
+
+    await loadSupabaseReviewComments();
+    renderFeed();
+    return true;
+  }
+
+  setLocalReviewComment(comment);
+  renderFeed();
+  return true;
+}
+
+async function deleteReviewComment(commentId) {
+  const account = getAccount();
+  if (!account) return;
+
+  if (isSupabaseReady() && supabaseReviewCommentsSupported) {
+    const { error } = await supabaseClient
+      .from("review_comments")
+      .delete()
+      .eq("id", commentId)
+      .eq("profile_id", account.id);
+
+    if (error) {
+      if (supabaseMissingRelationError(error, "review_comments")) {
+        supabaseReviewCommentsSupported = false;
+        deleteLocalReviewComment(commentId);
+        renderFeed();
+        return;
+      }
+      showAppStatus(`Could not delete comment: ${error.message}`, true);
+      return;
+    }
+
+    await loadSupabaseReviewComments();
+    renderFeed();
+    return;
+  }
+
+  deleteLocalReviewComment(commentId);
+  renderFeed();
+}
+
 function getBurger(id) {
   return getEvent().burgers.find((burger) => burger.id === id) || {
     id,
@@ -1475,6 +1885,12 @@ function burgerMatchesActiveFilters(burger, visitedIds = personalVisitedBurgerId
     (!filters.openNow || burgerOpenAt(burger)) &&
     (!filters.hideVisited || !visitedIds.has(burger.id))
   );
+}
+
+function burgerMatchesWantScope(burger) {
+  if (filters.wantScope === "personal") return accountWantsBurger(burger.id);
+  if (filters.wantScope === "group") return burgerWantEntries(burger.id).length > 0;
+  return true;
 }
 
 function summarizeReviews(reviews) {
@@ -1542,6 +1958,9 @@ function hydrateFilters() {
     if (!event.dates.includes(els.scheduleDateInput.value)) {
       els.scheduleDateInput.value = activeScheduleDate;
     }
+  }
+  if (els.wantScopeFilter) {
+    els.wantScopeFilter.value = filters.wantScope;
   }
 
   els.neighborhoodFilter.value = areas.includes(currentArea) ? currentArea : "all";
@@ -1672,6 +2091,11 @@ function reviewImage(review) {
   return null;
 }
 
+function resetFeedPagination() {
+  feedVisibleCount = feedPageSize;
+  activeFeedReviewId = "";
+}
+
 function canCurrentUserEditReview(review) {
   const account = getAccount();
   return Boolean(account && review.profileId === account.id);
@@ -1682,15 +2106,20 @@ function displayTags(burger) {
 }
 
 function renderFeed() {
-  const reviews = getFilteredReviews();
-  els.resultCount.textContent = `${reviews.length} review${reviews.length === 1 ? "" : "s"}`;
+  const allReviews = getFilteredReviews();
+  const visibleCount = Math.min(feedVisibleCount, allReviews.length);
+  const reviews = allReviews.slice(0, visibleCount);
+  const hasMore = visibleCount < allReviews.length;
+  els.resultCount.textContent = hasMore
+    ? `Showing ${visibleCount} of ${allReviews.length} reviews`
+    : `${allReviews.length} review${allReviews.length === 1 ? "" : "s"}`;
 
-  if (!reviews.length) {
+  if (!allReviews.length) {
     els.reviewGrid.innerHTML = $("#emptyTemplate").innerHTML;
     return;
   }
 
-  els.reviewGrid.innerHTML = reviews
+  els.reviewGrid.innerHTML = `${reviews
     .map((review) => {
       const image = reviewImage(review);
       const hasToggle = Boolean(review.photo && review.burger.restaurantPhoto);
@@ -1701,10 +2130,14 @@ function renderFeed() {
       const showingDescription = reviewTextViewByReview[review.id] === "description";
       const reviewCopy = showingDescription ? review.burger.description || "No restaurant description." : review.notes || "";
       const imageCaption = image ? `${review.burger.restaurant} - ${review.burger.burger} (${image.source})` : "";
+      const likes = reviewLikeEntries(review.id);
+      const liked = accountLikedReview(review.id);
+      const comments = reviewCommentEntries(review.id);
+      const account = getAccount();
       return `
-        <article class="review-card">
+        <article class="review-card ${activeFeedReviewId === review.id ? "is-highlighted" : ""}" id="review-card-${escapeAttr(review.id)}" data-review-card="${escapeAttr(review.id)}" tabindex="-1">
           <div class="photo-frame ${image ? "review-photo-button" : "placeholder-photo"} ${friendPhoto ? "friend-photo-frame" : ""} ${placeholderArt ? "placeholder-art" : ""}" ${image ? `role="button" tabindex="0" data-preview-review-photo="${escapeAttr(image.src)}" data-preview-alt="${escapeAttr(image.alt)}" data-preview-caption="${escapeAttr(imageCaption)}" aria-label="Open photo preview for ${escapeAttr(review.burger.restaurant)}"` : ""}>
-            ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}">` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
+            ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}" loading="lazy" decoding="async">` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
             ${hasToggle ? `<button class="photo-toggle" type="button" data-photo-toggle="${escapeAttr(review.id)}" aria-label="Toggle restaurant photo">▣</button>` : ""}
             ${image ? `<span class="photo-source">${escapeHtml(image.source)}</span>` : ""}
           </div>
@@ -1749,17 +2182,68 @@ function renderFeed() {
                 </button>
               </div>
             ` : ""}
+            <div class="reaction-panel">
+              <div class="reaction-actions">
+                <button class="like-button ${liked ? "is-liked" : ""}" type="button" data-like-review="${escapeAttr(review.id)}" aria-pressed="${liked}">
+                  <span aria-hidden="true">${liked ? "♥" : "♡"}</span>
+                  <b>${likes.length}</b>
+                  <span>${likes.length === 1 ? "Like" : "Likes"}</span>
+                </button>
+                <span>${comments.length} comment${comments.length === 1 ? "" : "s"}</span>
+              </div>
+              ${comments.length ? `
+                <div class="comment-list">
+                  ${comments.map((comment) => `
+                    <article class="comment-item">
+                      <div>
+                        <strong>${escapeHtml(comment.displayName)}</strong>
+                        <time datetime="${escapeAttr(comment.createdAt)}">${escapeHtml(timestampFormatter.format(new Date(comment.createdAt)))}</time>
+                      </div>
+                      <p>${escapeHtml(comment.body)}</p>
+                      ${account && comment.profileId === account.id ? `<button class="text-button comment-delete-button" type="button" data-delete-comment="${escapeAttr(comment.id)}">Delete</button>` : ""}
+                    </article>
+                  `).join("")}
+                </div>
+              ` : ""}
+              ${account ? `
+                <form class="comment-form" data-comment-form="${escapeAttr(review.id)}">
+                  <label>
+                    <span>Comment</span>
+                    <input name="comment" placeholder="Add a quick thought" autocomplete="off">
+                  </label>
+                  <button class="ghost-button compact-button" type="submit">Post</button>
+                </form>
+              ` : `<button class="text-button" type="button" data-login-for-comment>Log in to comment.</button>`}
+            </div>
           </div>
         </article>
       `;
     })
-    .join("");
+    .join("")}
+    ${hasMore ? `
+      <div class="feed-load-more">
+        <button class="ghost-button compact-button" type="button" data-load-more-feed>Load More</button>
+      </div>
+    ` : ""}`;
 }
 
 function burgerReviewStats(burgerId) {
   const reviews = getReviews().filter((review) => review.burgerId === burgerId);
   const avg = reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0;
   return { count: reviews.length, avg };
+}
+
+function sortBurgerBoard(burgers) {
+  return [...burgers].sort((a, b) => {
+    if (filters.sort === "rating") {
+      const aStats = burgerReviewStats(a.id);
+      const bStats = burgerReviewStats(b.id);
+      return bStats.avg - aStats.avg || bStats.count - aStats.count || a.restaurant.localeCompare(b.restaurant);
+    }
+    if (filters.sort === "restaurant") return a.restaurant.localeCompare(b.restaurant);
+    if (filters.sort === "available") return (a.available[0] || "").localeCompare(b.available[0] || "") || a.restaurant.localeCompare(b.restaurant);
+    return 0;
+  });
 }
 
 function burgerVisitorCount(burgerId) {
@@ -1889,7 +2373,7 @@ function renderBurgerList() {
   const hiddenIds = accountHiddenIds();
   const visibleUnhiddenBurgers = event.burgers.filter((burger) => !hiddenIds.has(burger.id));
   const visitedIds = personalVisitedBurgerIds();
-  const visibleBurgers = visibleUnhiddenBurgers.filter((burger) => burgerMatchesActiveFilters(burger, visitedIds));
+  const visibleBurgers = sortBurgerBoard(visibleUnhiddenBurgers.filter((burger) => burgerMatchesActiveFilters(burger, visitedIds) && burgerMatchesWantScope(burger)));
 
   if (!visibleUnhiddenBurgers.length) {
     els.burgerList.innerHTML = `
@@ -1905,7 +2389,7 @@ function renderBurgerList() {
     els.burgerList.innerHTML = `
       <div class="empty-state">
         <h3>No burgers match the current filters.</h3>
-        <p>Try clearing Open now, Hide visited, search, or area filters.</p>
+        <p>Try clearing Open now, Hide visited, Wants, search, or area filters.</p>
       </div>
     `;
     return;
@@ -2002,10 +2486,11 @@ function renderMap() {
 
   els.mapList.innerHTML = mappedBurgers
     .map((burger) => `
-      <article>
+      <button class="map-list-item ${activeMapBurgerId === burger.id ? "is-active" : ""}" type="button" data-map-focus="${escapeAttr(burger.id)}">
         <strong>${escapeHtml(burger.restaurant)}</strong>
         <span>${escapeHtml(burger.neighborhood)}</span>
-      </article>
+        <small>${escapeHtml(burger.burger)}</small>
+      </button>
     `)
     .join("");
 }
@@ -2105,17 +2590,23 @@ function renderLeafletMap(mappedBurgers) {
   }
 
   burgerMapMarkers.clearLayers();
+  burgerMapMarkerById = new Map();
 
   const bounds = [];
   mappedBurgers.forEach((burger) => {
     const latLng = [burger.coordinates.lat, burger.coordinates.lng];
     bounds.push(latLng);
-    L.marker(latLng, {
+    const marker = L.marker(latLng, {
       title: burger.restaurant,
       icon: createMapMarkerIcon(burger)
     })
       .bindPopup(mapPopupHtml(burger), mapPopupSettings())
       .addTo(burgerMapMarkers);
+    marker.on("click", () => {
+      activeMapBurgerId = burger.id;
+      updateMapListActiveState();
+    });
+    burgerMapMarkerById.set(burger.id, marker);
   });
 
   if (bounds.length) {
@@ -2125,6 +2616,26 @@ function renderLeafletMap(mappedBurgers) {
   }
 
   window.requestAnimationFrame(() => burgerMap.invalidateSize());
+}
+
+function updateMapListActiveState() {
+  els.mapList?.querySelectorAll("[data-map-focus]").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.mapFocus === activeMapBurgerId);
+  });
+}
+
+function focusMapBurger(burgerId) {
+  const burger = getBurger(burgerId);
+  if (!burger?.coordinates) return;
+  activeMapBurgerId = burgerId;
+  const marker = burgerMapMarkerById.get(burgerId);
+  if (!marker || !burgerMap) return;
+
+  burgerMap.setView([burger.coordinates.lat, burger.coordinates.lng], Math.max(burgerMap.getZoom(), 14), {
+    animate: true
+  });
+  marker.openPopup();
+  updateMapListActiveState();
 }
 
 function setMapFullscreen(isFullscreen) {
@@ -2145,34 +2656,106 @@ function setMapFullscreen(isFullscreen) {
   });
 }
 
+function profileKey(profileId = "", displayName = "") {
+  return profileId || `name:${displayName}`;
+}
+
+function scheduleProfiles() {
+  const profiles = new Map();
+  const account = getAccount();
+  if (account) {
+    profiles.set(account.id, {
+      id: account.id,
+      displayName: `${account.displayName} (Me)`
+    });
+  }
+
+  getReviews().forEach((review) => {
+    const id = profileKey(review.profileId, review.reviewer);
+    if (!profiles.has(id)) {
+      profiles.set(id, {
+        id,
+        displayName: review.reviewer || "Burger friend"
+      });
+    }
+  });
+
+  eventScheduleEntries().forEach((entry) => {
+    const id = profileKey(entry.profileId, entry.displayName);
+    if (!profiles.has(id)) {
+      profiles.set(id, {
+        id,
+        displayName: entry.displayName || "Burger friend"
+      });
+    }
+  });
+
+  return [...profiles.values()].sort((a, b) => {
+    if (account && a.id === account.id) return -1;
+    if (account && b.id === account.id) return 1;
+    return a.displayName.localeCompare(b.displayName);
+  });
+}
+
+function selectedScheduleProfile() {
+  const profiles = scheduleProfiles();
+  const account = getAccount();
+  if (selectedScheduleProfileId && profiles.some((profile) => profile.id === selectedScheduleProfileId)) {
+    return selectedScheduleProfileId;
+  }
+  selectedScheduleProfileId = account?.id || profiles[0]?.id || "";
+  return selectedScheduleProfileId;
+}
+
+function entryMatchesScheduleProfile(entry, selectedProfileId) {
+  return profileKey(entry.profileId, entry.displayName) === selectedProfileId;
+}
+
+function reviewMatchesScheduleProfile(review, selectedProfileId) {
+  return profileKey(review.profileId, review.reviewer) === selectedProfileId;
+}
+
+function renderScheduleOwnerFilter() {
+  if (!els.scheduleOwnerFilter) return;
+  const profiles = scheduleProfiles();
+  const selectedProfileId = selectedScheduleProfile();
+  els.scheduleOwnerFilter.innerHTML = profiles.length
+    ? profiles.map((profile) => `<option value="${escapeAttr(profile.id)}">${escapeHtml(profile.displayName)}</option>`).join("")
+    : `<option value="">No schedules yet</option>`;
+  els.scheduleOwnerFilter.value = selectedProfileId;
+  els.scheduleOwnerFilter.disabled = !profiles.length;
+}
+
 function renderSchedule() {
   if (!els.scheduleList) return;
   const event = getEvent();
   const activeDate = ensureSelectedScheduleDate(event);
   renderScheduleDayTabs(event, activeDate);
+  renderScheduleOwnerFilter();
 
-  const account = getAccount();
-  if (!account) {
+  const selectedProfileId = selectedScheduleProfile();
+  if (!selectedProfileId) {
     els.scheduleList.innerHTML = `
       <div class="empty-state">
-        <h3>Log in to build your schedule.</h3>
-        <p>Planned and visited stops stay tied to your account on this device.</p>
+        <h3>No schedules yet.</h3>
+        <p>Log in and add a stop, or post a review to start a public schedule.</p>
       </div>
     `;
     return;
   }
 
   const reviewEntries = getReviews()
-    .filter((review) => reviewBelongsToAccount(review, account))
+    .filter((review) => reviewMatchesScheduleProfile(review, selectedProfileId))
     .map((review) => {
       const timestamp = dateTimePartsFromTimestamp(review.createdAt);
       const reviewNote = stripWaitTimeFallback(review.notes || "");
       return {
         id: `review-${review.id}`,
+        reviewId: review.id,
         eventId: currentEventId,
         burgerId: review.burgerId,
-        profileId: account.id,
-        displayName: account.displayName,
+        profileId: review.profileId,
+        displayName: review.reviewer,
         date: timestamp.date,
         time: timestamp.time,
         sortKey: timestamp.sortKey || review.createdAt || "",
@@ -2187,8 +2770,9 @@ function renderSchedule() {
     .filter((entry) => entry.date && entry.time);
 
   const reviewedKeys = new Set(reviewEntries.map((entry) => `${entry.burgerId}:${entry.date}`));
-  const manualEntries = accountScheduleEntries()
-    .filter((entry) => !(entry.status === "visited" && reviewedKeys.has(`${entry.burgerId}:${entry.date}`)))
+  const manualEntries = eventScheduleEntries()
+    .filter((entry) => entryMatchesScheduleProfile(entry, selectedProfileId))
+    .filter((entry) => !reviewedKeys.has(`${entry.burgerId}:${entry.date}`))
     .map((entry) => ({
       ...entry,
       sortKey: `${entry.date}T${entry.time}`,
@@ -2244,9 +2828,11 @@ function renderSchedule() {
             ${entry.note ? `<p>${escapeHtml(entry.note)}</p>` : ""}
           </div>
           <span class="schedule-status ${statusClass}">${statusLabel}</span>
-          ${entry.source === "manual"
+          ${entry.source === "manual" && reviewBelongsToAccount(entry, getAccount())
             ? `<button class="ghost-button compact-button" type="button" data-delete-schedule="${escapeAttr(entry.id)}">Remove</button>`
-            : `<span class="schedule-source">From review</span>`}
+            : entry.source === "review"
+              ? `<button class="ghost-button compact-button" type="button" data-open-review="${escapeAttr(entry.reviewId)}">Open Review</button>`
+              : `<span class="schedule-source">${escapeHtml(entry.displayName || "")}</span>`}
         </article>
       `;
     })
@@ -2643,12 +3229,14 @@ function openReviewEditor(reviewId) {
 }
 
 function resetFilters() {
-  filters = { search: "", neighborhood: "all", friend: "all", rating: 0, sort: "recent", openNow: false, hideVisited: false };
+  filters = { search: "", neighborhood: "all", friend: "all", rating: 0, sort: "recent", openNow: false, hideVisited: false, wantScope: "all" };
   els.searchInput.value = "";
   els.ratingFilter.value = "0";
   els.sortSelect.value = "recent";
   if (els.openNowFilter) els.openNowFilter.checked = false;
   if (els.hideVisitedFilter) els.hideVisitedFilter.checked = false;
+  if (els.wantScopeFilter) els.wantScopeFilter.value = "all";
+  resetFeedPagination();
 }
 
 function renderFilteredViews() {
@@ -2657,39 +3245,108 @@ function renderFilteredViews() {
   renderMap();
 }
 
+function loadMoreFeed() {
+  const total = getFilteredReviews().length;
+  if (feedVisibleCount >= total) return;
+  feedVisibleCount = Math.min(total, feedVisibleCount + feedPageSize);
+  renderFeed();
+}
+
+function maybeLoadMoreFeed() {
+  if (currentViewName !== "feed" || !els.reviewGrid || !getFilteredReviews().length) return;
+  const rect = els.reviewGrid.getBoundingClientRect();
+  if (rect.bottom - window.innerHeight < 700) {
+    loadMoreFeed();
+  }
+}
+
+function setFilterControlValues() {
+  els.searchInput.value = filters.search;
+  els.ratingFilter.value = String(filters.rating);
+  els.sortSelect.value = filters.sort;
+  if (els.openNowFilter) els.openNowFilter.checked = filters.openNow;
+  if (els.hideVisitedFilter) els.hideVisitedFilter.checked = filters.hideVisited;
+  if (els.wantScopeFilter) els.wantScopeFilter.value = filters.wantScope;
+}
+
+function openReviewInFeed(reviewId) {
+  const review = getReviews().find((entry) => entry.id === reviewId);
+  if (!review) return;
+
+  let filteredReviews = getFilteredReviews();
+  if (!filteredReviews.some((entry) => entry.id === reviewId)) {
+    filters = { ...filters, search: "", neighborhood: "all", friend: "all", rating: 0, openNow: false, hideVisited: false };
+    setFilterControlValues();
+    hydrateFilters();
+    filteredReviews = getFilteredReviews();
+  }
+
+  const index = filteredReviews.findIndex((entry) => entry.id === reviewId);
+  if (index >= 0) {
+    feedVisibleCount = Math.max(feedPageSize, Math.ceil((index + 1) / feedPageSize) * feedPageSize);
+  }
+  activeFeedReviewId = reviewId;
+  showView("feed");
+  renderFeed();
+  requestAnimationFrame(() => {
+    const card = document.getElementById(`review-card-${reviewId}`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.focus?.({ preventScroll: true });
+    window.setTimeout(() => {
+      if (activeFeedReviewId === reviewId) {
+        activeFeedReviewId = "";
+        renderFeed();
+      }
+    }, 3500);
+  });
+}
+
 els.searchInput.addEventListener("input", (event) => {
   filters.search = event.target.value;
+  resetFeedPagination();
   renderFilteredViews();
 });
 
 els.neighborhoodFilter.addEventListener("change", (event) => {
   filters.neighborhood = event.target.value;
+  resetFeedPagination();
   renderFilteredViews();
 });
 
 els.friendFilter.addEventListener("change", (event) => {
   filters.friend = event.target.value;
+  resetFeedPagination();
   renderFeed();
 });
 
 els.ratingFilter.addEventListener("change", (event) => {
   filters.rating = Number(event.target.value);
+  resetFeedPagination();
   renderFeed();
 });
 
 els.sortSelect.addEventListener("change", (event) => {
   filters.sort = event.target.value;
-  renderFeed();
+  resetFeedPagination();
+  renderFilteredViews();
 });
 
 els.openNowFilter?.addEventListener("change", (event) => {
   filters.openNow = event.target.checked;
+  resetFeedPagination();
   renderFilteredViews();
 });
 
 els.hideVisitedFilter?.addEventListener("change", (event) => {
   filters.hideVisited = event.target.checked;
+  resetFeedPagination();
   renderFilteredViews();
+});
+
+els.wantScopeFilter?.addEventListener("change", (event) => {
+  filters.wantScope = event.target.value;
+  renderBurgerBoardState();
 });
 
 els.mapPopupOptions.forEach((input) => input.addEventListener("change", (event) => {
@@ -2701,8 +3358,20 @@ els.mapFullscreenToggle?.addEventListener("click", () => {
   setMapFullscreen(!mapFullscreen);
 });
 
-els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
-window.addEventListener("scroll", updateBackToSectionButton, { passive: true });
+els.mapList?.addEventListener("click", (event) => {
+  const mapItem = event.target.closest("[data-map-focus]");
+  if (!mapItem) return;
+  focusMapBurger(mapItem.dataset.mapFocus);
+});
+
+els.tabs.forEach((tab) => tab.addEventListener("click", () => {
+  showView(tab.dataset.view);
+  if (tab.dataset.view === "feed") maybeLoadMoreFeed();
+}));
+window.addEventListener("scroll", () => {
+  updateBackToSectionButton();
+  maybeLoadMoreFeed();
+}, { passive: true });
 window.addEventListener("resize", updateBackToSectionButton);
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && mapFullscreen) {
@@ -2746,6 +3415,7 @@ els.eventPicker.addEventListener("change", async (event) => {
   currentEventId = event.target.value;
   wantedStatIndex = 0;
   selectedScheduleDate = "";
+  selectedScheduleProfileId = "";
   resetFilters();
   await refreshSupabaseData();
   renderAll();
@@ -2983,6 +3653,9 @@ els.logoutButton.addEventListener("click", async () => {
     remoteReviewsByEvent = {};
     remoteWantsByEvent = {};
     remoteHiddenByEvent = {};
+    remoteReviewLikesByEvent = {};
+    remoteReviewCommentsByEvent = {};
+    remoteSchedulesByEvent = {};
     setAuthStatus("Signed out. Log in with email and password when you are ready.");
     els.loginDialog.close();
     renderAll();
@@ -3010,12 +3683,37 @@ els.reviewGrid.addEventListener("click", (event) => {
   const previewPhotoButton = event.target.closest("[data-preview-review-photo]");
   const editReviewButton = event.target.closest("[data-edit-review]");
   const deleteReviewButton = event.target.closest("[data-delete-review]");
+  const likeReviewButton = event.target.closest("[data-like-review]");
+  const deleteCommentButton = event.target.closest("[data-delete-comment]");
+  const loadMoreButton = event.target.closest("[data-load-more-feed]");
+  const loginForCommentButton = event.target.closest("[data-login-for-comment]");
   const copyToggleButton = event.target.closest("[data-review-copy-toggle]");
   const jumpBurgerButton = event.target.closest("[data-jump-burger]");
+
+  if (loadMoreButton) {
+    loadMoreFeed();
+    return;
+  }
+
+  if (loginForCommentButton) {
+    els.loginDialog.showModal();
+    return;
+  }
+
+  if (likeReviewButton) {
+    toggleReviewLike(likeReviewButton.dataset.likeReview);
+    return;
+  }
+
+  if (deleteCommentButton) {
+    deleteReviewComment(deleteCommentButton.dataset.deleteComment);
+    return;
+  }
 
   if (friendButton) {
     filters.friend = friendButton.dataset.friendFilter;
     els.friendFilter.value = filters.friend;
+    resetFeedPagination();
     showView("feed");
     renderFeed();
   }
@@ -3054,6 +3752,15 @@ els.reviewGrid.addEventListener("click", (event) => {
     if (deleteReviewButton.disabled) return;
     deleteReview(deleteReviewButton.dataset.deleteReview);
   }
+});
+
+els.reviewGrid.addEventListener("submit", async (event) => {
+  const commentForm = event.target.closest("[data-comment-form]");
+  if (!commentForm) return;
+  event.preventDefault();
+  const input = commentForm.elements.comment;
+  const posted = await addReviewComment(commentForm.dataset.commentForm, input.value);
+  if (posted) input.value = "";
 });
 
 els.reviewGrid.addEventListener("keydown", (event) => {
@@ -3135,11 +3842,16 @@ els.scheduleDayTabs?.addEventListener("click", (event) => {
   renderSchedule();
 });
 
+els.scheduleOwnerFilter?.addEventListener("change", (event) => {
+  selectedScheduleProfileId = event.target.value;
+  renderSchedule();
+});
+
 els.openScheduleForm?.addEventListener("click", openScheduleDialog);
 els.closeScheduleForm?.addEventListener("click", closeScheduleDialog);
 els.cancelScheduleStop?.addEventListener("click", closeScheduleDialog);
 
-els.scheduleForm?.addEventListener("submit", (event) => {
+els.scheduleForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const account = getAccount();
   if (!account) {
@@ -3163,18 +3875,32 @@ els.scheduleForm?.addEventListener("submit", (event) => {
     createdAt: new Date().toISOString()
   };
 
-  saveScheduleEntry(entry);
-  selectedScheduleDate = entry.date;
-  els.scheduleNoteInput.value = "";
-  closeScheduleDialog();
-  renderSchedule();
+  try {
+    await saveScheduleEntry(entry);
+    selectedScheduleDate = entry.date;
+    selectedScheduleProfileId = account.id;
+    els.scheduleNoteInput.value = "";
+    closeScheduleDialog();
+    renderSchedule();
+  } catch (error) {
+    showAppStatus(`Could not save schedule stop: ${error.message}`, true);
+  }
 });
 
-els.scheduleList?.addEventListener("click", (event) => {
+els.scheduleList?.addEventListener("click", async (event) => {
   const deleteButton = event.target.closest("[data-delete-schedule]");
+  const openReviewButton = event.target.closest("[data-open-review]");
+  if (openReviewButton) {
+    openReviewInFeed(openReviewButton.dataset.openReview);
+    return;
+  }
   if (!deleteButton) return;
-  deleteScheduleEntry(deleteButton.dataset.deleteSchedule);
-  renderSchedule();
+  try {
+    await deleteScheduleEntry(deleteButton.dataset.deleteSchedule);
+    renderSchedule();
+  } catch (error) {
+    showAppStatus(`Could not remove schedule stop: ${error.message}`, true);
+  }
 });
 
 els.closeWaitDialog?.addEventListener("click", closeWaitReportDialog);

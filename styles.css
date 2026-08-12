@@ -524,6 +524,31 @@ main {
   gap: 12px;
 }
 
+.board-filter-bar,
+.schedule-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.board-filter-bar label,
+.schedule-toolbar label {
+  width: min(100%, 260px);
+}
+
+.board-filter-bar select,
+.schedule-toolbar select {
+  width: 100%;
+  min-height: 44px;
+  border: var(--line);
+  border-radius: 8px;
+  background: var(--plate);
+  color: var(--ink);
+  padding: 10px 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
 .filter-check {
   display: flex;
   align-items: center;
@@ -620,7 +645,7 @@ legend {
 .hype-card,
 .hype-empty,
 .day-card,
-.map-list article,
+.map-list-item,
 .empty-state {
   background: var(--plate);
   border: var(--line);
@@ -630,6 +655,11 @@ legend {
 
 .review-card {
   overflow: hidden;
+}
+
+.review-card.is-highlighted {
+  outline: 5px solid var(--bun);
+  outline-offset: 4px;
 }
 
 .photo-frame {
@@ -894,6 +924,107 @@ legend {
   padding: 7px 10px;
   box-shadow: 2px 2px 0 var(--ink);
   font-weight: 950;
+}
+
+.reaction-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid rgba(37, 25, 20, 0.22);
+}
+
+.reaction-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #6a5448;
+  font-weight: 900;
+}
+
+.like-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 7px 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-weight: 950;
+}
+
+.like-button.is-liked {
+  background: var(--ketchup);
+  color: white;
+}
+
+.comment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.comment-item {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.comment-item div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.comment-item time {
+  color: #6a5448;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.comment-item p {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.comment-delete-button {
+  width: fit-content;
+  min-height: 0;
+  padding: 0;
+  justify-self: end;
+  box-shadow: none;
+}
+
+.comment-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.comment-form input {
+  width: 100%;
+  min-height: 38px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
+.feed-load-more {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  padding: 8px;
 }
 
 .burger-list {
@@ -1469,12 +1600,25 @@ legend {
   display: grid;
   align-content: start;
   gap: 12px;
+  max-height: clamp(360px, 62vh, 620px);
+  overflow: auto;
+  padding: 0 6px 6px 0;
 }
 
-.map-list article {
+.map-list-item {
   display: grid;
   gap: 3px;
+  width: 100%;
   padding: 12px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.map-list-item:hover,
+.map-list-item:focus-visible,
+.map-list-item.is-active {
+  background: var(--bun);
+  outline: none;
 }
 
 .map-list span {
@@ -2139,8 +2283,11 @@ legend {
 
   .stats-grid,
   .toolbar,
+  .board-filter-bar,
+  .schedule-toolbar,
   .schedule-form,
   .schedule-item,
+  .comment-form,
   .review-grid,
   .map-shell,
   .map-options,
@@ -2154,6 +2301,16 @@ legend {
 
   .toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .board-filter-bar,
+  .schedule-toolbar {
+    justify-content: stretch;
+  }
+
+  .board-filter-bar label,
+  .schedule-toolbar label {
+    width: 100%;
   }
 
   .toolbar > label:not(.filter-check) {

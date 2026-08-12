@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=57">
+    <link rel="stylesheet" href="styles.css?v=60">
   </head>
   <body>
     <header class="hero">
@@ -120,6 +120,16 @@
           <h2 id="burgersTitle">Burger Board</h2>
           <p>Examine the options, mark the ones you want, hide the ones you don't.</p>
         </div>
+        <div class="board-filter-bar" aria-label="Burger Board filters">
+          <label>
+            <span>Wants</span>
+            <select id="wantScopeFilter">
+              <option value="all">All burgers</option>
+              <option value="group">Group Wants</option>
+              <option value="personal">Personal Wants</option>
+            </select>
+          </label>
+        </div>
         <div class="hype-list" id="hypeList" aria-label="Most hyped burgers"></div>
         <div class="burger-list" id="burgerList"></div>
       </section>
@@ -186,6 +196,12 @@
             <span aria-hidden="true">+</span>
             <span>Add Stop</span>
           </button>
+        </div>
+        <div class="schedule-toolbar" aria-label="Schedule browser">
+          <label>
+            <span>Schedule</span>
+            <select id="scheduleOwnerFilter"></select>
+          </label>
         </div>
         <div class="schedule-day-tabs" id="scheduleDayTabs" role="tablist" aria-label="Schedule days"></div>
         <div class="schedule-list" id="scheduleList"></div>
@@ -404,6 +420,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=57" defer></script>
+    <script src="app.js?v=60" defer></script>
   </body>
 </html>
