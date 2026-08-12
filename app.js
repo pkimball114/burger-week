@@ -574,7 +574,7 @@ function supabaseMissingRelationError(error, relationName) {
   const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
   const relation = relationName.toLowerCase();
   return (
-    ["42P01", "PGRST106", "PGRST205", "42501"].includes(error?.code) ||
+    ["42P01", "PGRST106", "PGRST200", "PGRST205", "42501"].includes(error?.code) ||
     message.includes(relation) ||
     message.includes("could not find") ||
     message.includes("permission denied")
@@ -1269,18 +1269,37 @@ async function refreshSupabaseData() {
   if (!isSupabaseReady()) return;
 
   try {
-    await Promise.all([
-      loadSupabaseReviews(),
-      loadSupabaseWants(),
-      loadSupabaseHidden(),
-      loadSupabaseReviewLikes(),
-      loadSupabaseReviewComments(),
-      loadSupabaseSchedules()
-    ]);
-    setAuthStatus("Shared Supabase mode is active.");
+    await loadSupabaseReviews();
   } catch (error) {
-    setAuthStatus(`Supabase sync failed: ${error.message}`);
+    setAuthStatus(`Supabase review sync failed: ${error.message}`);
+    return;
   }
+
+  const results = await Promise.allSettled([
+    loadSupabaseWants(),
+    loadSupabaseHidden(),
+    loadSupabaseReviewLikes(),
+    loadSupabaseReviewComments(),
+    loadSupabaseSchedules()
+  ]);
+  const failed = results
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason?.message || "Unknown error");
+
+  if (failed.length) {
+    setAuthStatus(`Reviews loaded. Some shared extras did not sync: ${failed.join("; ")}`);
+    return;
+  }
+
+  const pendingOptionalTables = [
+    !supabaseReviewLikesSupported && "likes",
+    !supabaseReviewCommentsSupported && "comments",
+    !supabaseSchedulesSupported && "schedules"
+  ].filter(Boolean);
+
+  setAuthStatus(pendingOptionalTables.length
+    ? `Shared reviews are active. ${pendingOptionalTables.join(", ")} will stay local until the social/schedule migration is applied.`
+    : "Shared Supabase mode is active.");
 }
 
 function renderBurgerBoardState() {
