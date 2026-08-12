@@ -712,6 +712,9 @@ legend {
 }
 
 .photo-frame img {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -727,6 +730,7 @@ legend {
 }
 
 .photo-frame.placeholder-art img {
+  position: static;
   width: min(78%, 250px);
   height: min(78%, 250px);
   object-fit: contain;
