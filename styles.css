@@ -725,13 +725,6 @@ legend {
   object-position: center;
 }
 
-@media (min-width: 721px) {
-  .review-photo-button.friend-photo-frame img {
-    object-fit: contain;
-    object-position: center center;
-  }
-}
-
 .placeholder-photo span {
   display: grid;
   place-items: center;
