@@ -54,6 +54,7 @@ create policy "users update own schedules" on public.schedule_entries for update
 create policy "users delete own schedules" on public.schedule_entries for delete to authenticated using ((select auth.uid()) = profile_id);
 
 grant usage on schema public to authenticated;
+grant select on public.profiles to authenticated;
 grant select on public.review_likes, public.review_comments, public.schedule_entries to authenticated;
 grant insert, delete on public.review_likes, public.review_comments to authenticated;
 grant insert, update, delete on public.schedule_entries to authenticated;

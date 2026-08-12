@@ -173,6 +173,7 @@ let remoteHiddenByEvent = {};
 let remoteReviewLikesByEvent = {};
 let remoteReviewCommentsByEvent = {};
 let remoteSchedulesByEvent = {};
+let remoteProfileNames = {};
 let appStatusTimer = 0;
 let activeReviewEditId = "";
 let reviewBurgerSelection = "";
@@ -1095,10 +1096,12 @@ async function ensureSupabaseProfile(displayName = "") {
   if (error) {
     setAuthStatus(`Signed in, but profile sync failed: ${error.message}`);
     supabaseProfile = profile;
+    remoteProfileNames[profile.id] = profile.display_name;
     return profile;
   }
 
   supabaseProfile = data;
+  remoteProfileNames[data.id] = data.display_name;
   return data;
 }
 
@@ -1112,7 +1115,30 @@ async function signedPhotoUrl(path) {
 
 function profileNameFromRow(row, fallback = "Burger friend") {
   const account = getAccount();
-  return row.profiles?.display_name || (account && row.profile_id === account.id ? account.displayName : fallback);
+  return row.profiles?.display_name || remoteProfileNames[row.profile_id] || (account && row.profile_id === account.id ? account.displayName : fallback);
+}
+
+async function loadSupabaseProfileNames(profileIds = []) {
+  if (!supabaseClient || !profileIds.length) return false;
+
+  const uniqueIds = [...new Set(profileIds.filter(Boolean))].filter((profileId) => !remoteProfileNames[profileId]);
+  if (!uniqueIds.length) return true;
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("id,display_name")
+    .in("id", uniqueIds);
+
+  if (error) {
+    return false;
+  }
+
+  (data || []).forEach((profile) => {
+    if (profile.id && profile.display_name) {
+      remoteProfileNames[profile.id] = profile.display_name;
+    }
+  });
+  return true;
 }
 
 async function mapSupabaseReview(row) {
@@ -1175,6 +1201,11 @@ async function loadSupabaseReviews() {
 
   const mapped = await Promise.all((data || []).map(mapSupabaseReview));
   remoteReviewsByEvent[currentEventId] = mapped;
+  await loadSupabaseProfileNames(mapped.map((review) => review.profileId));
+  remoteReviewsByEvent[currentEventId] = mapped.map((review) => ({
+    ...review,
+    reviewer: remoteProfileNames[review.profileId] || review.reviewer
+  }));
 }
 
 async function loadSupabaseWants() {
@@ -1192,6 +1223,7 @@ async function loadSupabaseWants() {
     throw error;
   }
 
+  await loadSupabaseProfileNames((data || []).map((want) => want.profile_id));
   remoteWantsByEvent[currentEventId] = {};
   (data || []).forEach((want) => {
     remoteWantsByEvent[currentEventId][want.food_item_id] ||= {};
@@ -1242,6 +1274,7 @@ async function loadSupabaseReviewLikes() {
     throw error;
   }
 
+  await loadSupabaseProfileNames((data || []).map((like) => like.profile_id));
   remoteReviewLikesByEvent[currentEventId] = {};
   (data || []).forEach((like) => {
     remoteReviewLikesByEvent[currentEventId][like.review_id] ||= {};
@@ -1273,6 +1306,7 @@ async function loadSupabaseReviewComments() {
     throw error;
   }
 
+  await loadSupabaseProfileNames((data || []).map((comment) => comment.profile_id));
   remoteReviewCommentsByEvent[currentEventId] = {};
   (data || []).forEach((comment) => {
     remoteReviewCommentsByEvent[currentEventId][comment.review_id] ||= {};
@@ -1310,6 +1344,7 @@ async function loadSupabaseSchedules() {
     throw error;
   }
 
+  await loadSupabaseProfileNames((data || []).map((entry) => entry.profile_id));
   remoteSchedulesByEvent[currentEventId] = (data || []).map((entry) => ({
     id: entry.id,
     eventId: entry.event_id,
@@ -1420,6 +1455,7 @@ async function initializeSupabase() {
       remoteReviewLikesByEvent = {};
       remoteReviewCommentsByEvent = {};
       remoteSchedulesByEvent = {};
+      remoteProfileNames = {};
       setAuthStatus("Signed out. Log in with email and password when you are ready.");
     }
     renderAll();
@@ -3734,6 +3770,7 @@ els.logoutButton.addEventListener("click", async () => {
     remoteReviewLikesByEvent = {};
     remoteReviewCommentsByEvent = {};
     remoteSchedulesByEvent = {};
+    remoteProfileNames = {};
     setAuthStatus("Signed out. Log in with email and password when you are ready.");
     els.loginDialog.close();
     renderAll();
