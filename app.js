@@ -24,6 +24,7 @@ const reviewCommentStoreKey = "burger-week-review-comments-v1";
 const supabasePhotoBucket = "burger-review-photos";
 const reviewPhotoMaxDimension = 1600;
 const reviewPhotoJpegQuality = 0.82;
+const feedPortraitFriendPhotoObjectPosition = "center 45%";
 const feedPageSize = 12;
 const testAccount = {
   id: "local-test-user",
@@ -2347,9 +2348,7 @@ function markFeedPhotoOrientation(image) {
   const isPortrait = image.naturalHeight > image.naturalWidth * 1.05;
   frame.classList.toggle("is-portrait-photo", isPortrait);
   frame.classList.toggle("is-landscape-photo", !isPortrait);
-  if (isPortrait) {
-    image.style.objectPosition = "center 82%";
-  }
+  image.style.objectPosition = isPortrait ? feedPortraitFriendPhotoObjectPosition : "center";
 }
 
 function markRenderedFeedPhotoOrientations() {
@@ -2402,11 +2401,10 @@ function renderFeed() {
       const comments = reviewCommentEntries(review.id);
       const commentsExpanded = Boolean(expandedCommentsByReview[review.id]);
       const account = getAccount();
-      const friendPhotoStyle = friendPhoto ? ` style="object-position: center 82%;"` : "";
       return `
         <article class="review-card ${activeFeedReviewId === review.id ? "is-highlighted" : ""}" id="review-card-${escapeAttr(review.id)}" data-review-card="${escapeAttr(review.id)}" tabindex="-1">
           <div class="photo-frame ${image ? "review-photo-button" : "placeholder-photo"} ${friendPhoto ? "friend-photo-frame" : ""} ${placeholderArt ? "placeholder-art" : ""}" ${image ? `role="button" tabindex="0" data-preview-review-photo="${escapeAttr(image.src)}" data-preview-alt="${escapeAttr(image.alt)}" data-preview-caption="${escapeAttr(imageCaption)}" aria-label="Open photo preview for ${escapeAttr(review.burger.restaurant)}"` : ""}>
-            ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}" loading="lazy" decoding="async"${friendPhotoStyle}>` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
+            ${image ? `<img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.alt)}" loading="lazy" decoding="async">` : `<span>${escapeHtml(review.burger.restaurant.slice(0, 2).toUpperCase())}</span>`}
             ${hasToggle ? `<button class="photo-toggle" type="button" data-photo-toggle="${escapeAttr(review.id)}" aria-label="Toggle restaurant photo">▣</button>` : ""}
             ${image ? `<span class="photo-source">${escapeHtml(image.source)}</span>` : ""}
           </div>

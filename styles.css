@@ -719,11 +719,11 @@ legend {
 }
 
 .review-photo-button.friend-photo-frame img {
-  object-position: center 82%;
+  object-position: center;
 }
 
 .review-photo-button.friend-photo-frame.is-portrait-photo img {
-  object-position: center 82%;
+  object-position: center 45%;
 }
 
 .photo-frame.placeholder-art img {
