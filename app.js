@@ -161,6 +161,7 @@ let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
 let supabaseReviewWaitTimeSupported = true;
+let supabaseReviewProfilesSupported = true;
 let supabaseReviewLikesSupported = true;
 let supabaseReviewCommentsSupported = true;
 let supabaseSchedulesSupported = true;
@@ -578,6 +579,15 @@ function supabaseMissingRelationError(error, relationName) {
     message.includes(relation) ||
     message.includes("could not find") ||
     message.includes("permission denied")
+  );
+}
+
+function supabaseProfileJoinError(error) {
+  const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+  return (
+    supabaseMissingRelationError(error, "profiles") ||
+    message.includes("relationship") ||
+    message.includes("foreign key")
   );
 }
 
@@ -1100,12 +1110,17 @@ async function signedPhotoUrl(path) {
   return data?.signedUrl || "";
 }
 
+function profileNameFromRow(row, fallback = "Burger friend") {
+  const account = getAccount();
+  return row.profiles?.display_name || (account && row.profile_id === account.id ? account.displayName : fallback);
+}
+
 async function mapSupabaseReview(row) {
   const waitTimeFromNotes = waitTimeValueFromText(row.notes || "");
   return {
     id: row.id,
     burgerId: row.food_item_id,
-    reviewer: row.profiles?.display_name || "Burger friend",
+    reviewer: profileNameFromRow(row),
     profileId: row.profile_id,
     rating: Number(row.rating),
     notes: row.notes || "",
@@ -1117,19 +1132,41 @@ async function mapSupabaseReview(row) {
   };
 }
 
+function supabaseReviewSelect() {
+  return [
+    "id",
+    "event_id",
+    "food_item_id",
+    "profile_id",
+    "rating",
+    "notes",
+    supabaseReviewWaitTimeSupported ? "wait_time" : "",
+    "photo_path",
+    "created_at",
+    "updated_at",
+    supabaseReviewProfilesSupported ? "profiles(display_name)" : ""
+  ].filter(Boolean).join(",");
+}
+
+function selectWithOptionalProfiles(baseSelect) {
+  return supabaseReviewProfilesSupported ? `${baseSelect},profiles(display_name)` : baseSelect;
+}
+
 async function loadSupabaseReviews() {
-  const reviewSelect = supabaseReviewWaitTimeSupported
-    ? "id,event_id,food_item_id,profile_id,rating,notes,wait_time,photo_path,created_at,updated_at,profiles(display_name)"
-    : "id,event_id,food_item_id,profile_id,rating,notes,photo_path,created_at,updated_at,profiles(display_name)";
   const { data, error } = await supabaseClient
     .from("reviews")
-    .select(reviewSelect)
+    .select(supabaseReviewSelect())
     .eq("event_id", currentEventId)
     .order("created_at", { ascending: false });
 
   if (error) {
     if (supabaseReviewWaitTimeSupported && supabaseMissingColumnError(error, "wait_time")) {
       supabaseReviewWaitTimeSupported = false;
+      await loadSupabaseReviews();
+      return;
+    }
+    if (supabaseReviewProfilesSupported && supabaseProfileJoinError(error)) {
+      supabaseReviewProfilesSupported = false;
       await loadSupabaseReviews();
       return;
     }
@@ -1143,16 +1180,23 @@ async function loadSupabaseReviews() {
 async function loadSupabaseWants() {
   const { data, error } = await supabaseClient
     .from("wants")
-    .select("event_id,food_item_id,profile_id,created_at,profiles(display_name)")
+    .select(selectWithOptionalProfiles("event_id,food_item_id,profile_id,created_at"))
     .eq("event_id", currentEventId);
 
-  if (error) throw error;
+  if (error) {
+    if (supabaseReviewProfilesSupported && supabaseProfileJoinError(error)) {
+      supabaseReviewProfilesSupported = false;
+      await loadSupabaseWants();
+      return;
+    }
+    throw error;
+  }
 
   remoteWantsByEvent[currentEventId] = {};
   (data || []).forEach((want) => {
     remoteWantsByEvent[currentEventId][want.food_item_id] ||= {};
     remoteWantsByEvent[currentEventId][want.food_item_id][want.profile_id] = {
-      displayName: want.profiles?.display_name || "Burger friend",
+      displayName: profileNameFromRow(want),
       createdAt: want.created_at
     };
   });
@@ -1182,10 +1226,15 @@ async function loadSupabaseReviewLikes() {
   if (!supabaseReviewLikesSupported) return;
   const { data, error } = await supabaseClient
     .from("review_likes")
-    .select("event_id,review_id,profile_id,created_at,profiles(display_name)")
+    .select(selectWithOptionalProfiles("event_id,review_id,profile_id,created_at"))
     .eq("event_id", currentEventId);
 
   if (error) {
+    if (supabaseReviewProfilesSupported && supabaseProfileJoinError(error)) {
+      supabaseReviewProfilesSupported = false;
+      await loadSupabaseReviewLikes();
+      return;
+    }
     if (supabaseMissingRelationError(error, "review_likes")) {
       supabaseReviewLikesSupported = false;
       return;
@@ -1197,7 +1246,7 @@ async function loadSupabaseReviewLikes() {
   (data || []).forEach((like) => {
     remoteReviewLikesByEvent[currentEventId][like.review_id] ||= {};
     remoteReviewLikesByEvent[currentEventId][like.review_id][like.profile_id] = {
-      displayName: like.profiles?.display_name || "Burger friend",
+      displayName: profileNameFromRow(like),
       createdAt: like.created_at
     };
   });
@@ -1207,11 +1256,16 @@ async function loadSupabaseReviewComments() {
   if (!supabaseReviewCommentsSupported) return;
   const { data, error } = await supabaseClient
     .from("review_comments")
-    .select("id,event_id,review_id,profile_id,body,created_at,profiles(display_name)")
+    .select(selectWithOptionalProfiles("id,event_id,review_id,profile_id,body,created_at"))
     .eq("event_id", currentEventId)
     .order("created_at", { ascending: true });
 
   if (error) {
+    if (supabaseReviewProfilesSupported && supabaseProfileJoinError(error)) {
+      supabaseReviewProfilesSupported = false;
+      await loadSupabaseReviewComments();
+      return;
+    }
     if (supabaseMissingRelationError(error, "review_comments")) {
       supabaseReviewCommentsSupported = false;
       return;
@@ -1227,7 +1281,7 @@ async function loadSupabaseReviewComments() {
       eventId: comment.event_id,
       reviewId: comment.review_id,
       profileId: comment.profile_id,
-      displayName: comment.profiles?.display_name || "Burger friend",
+      displayName: profileNameFromRow(comment),
       body: comment.body || "",
       createdAt: comment.created_at
     };
@@ -1238,12 +1292,17 @@ async function loadSupabaseSchedules() {
   if (!supabaseSchedulesSupported) return;
   const { data, error } = await supabaseClient
     .from("schedule_entries")
-    .select("id,event_id,food_item_id,profile_id,visit_date,visit_time,status,note,created_at,profiles(display_name)")
+    .select(selectWithOptionalProfiles("id,event_id,food_item_id,profile_id,visit_date,visit_time,status,note,created_at"))
     .eq("event_id", currentEventId)
     .order("visit_date", { ascending: true })
     .order("visit_time", { ascending: true });
 
   if (error) {
+    if (supabaseReviewProfilesSupported && supabaseProfileJoinError(error)) {
+      supabaseReviewProfilesSupported = false;
+      await loadSupabaseSchedules();
+      return;
+    }
     if (supabaseMissingRelationError(error, "schedule_entries")) {
       supabaseSchedulesSupported = false;
       return;
@@ -1256,7 +1315,7 @@ async function loadSupabaseSchedules() {
     eventId: entry.event_id,
     burgerId: entry.food_item_id,
     profileId: entry.profile_id,
-    displayName: entry.profiles?.display_name || "Burger friend",
+    displayName: profileNameFromRow(entry),
     date: entry.visit_date,
     time: String(entry.visit_time || "").slice(0, 5),
     status: entry.status || "planned",
