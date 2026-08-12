@@ -166,6 +166,7 @@ let supabaseReviewProfilesSupported = true;
 let supabaseReviewLikesSupported = true;
 let supabaseReviewCommentsSupported = true;
 let supabaseSchedulesSupported = true;
+let supabaseWaitReportsSupported = true;
 let passwordRecoveryMode = false;
 let authStatusMessage = "";
 let remoteReviewsByEvent = {};
@@ -174,6 +175,7 @@ let remoteHiddenByEvent = {};
 let remoteReviewLikesByEvent = {};
 let remoteReviewCommentsByEvent = {};
 let remoteSchedulesByEvent = {};
+let remoteWaitReportsByEvent = {};
 let remoteProfileNames = {};
 let appStatusTimer = 0;
 let activeReviewEditId = "";
@@ -386,11 +388,33 @@ function accountWaitReports() {
   return loadJsonStore(waitReportStoreKey)[currentEventId]?.[account.id] || {};
 }
 
-function latestWaitReport(burgerId) {
-  return accountWaitReports()[burgerId] || null;
+function localWaitReportsForEvent() {
+  const eventStore = loadJsonStore(waitReportStoreKey)[currentEventId] || {};
+  return Object.values(eventStore).flatMap((bucket) => Object.values(bucket || {}));
 }
 
-function saveWaitReport(burgerId, waitTime, note = "") {
+function eventWaitReports() {
+  if (isSupabaseReady() && supabaseWaitReportsSupported) return remoteWaitReportsByEvent[currentEventId] || [];
+  return localWaitReportsForEvent();
+}
+
+function latestWaitReport(burgerId) {
+  return eventWaitReports()
+    .filter((report) => report.burgerId === burgerId)
+    .sort((a, b) => new Date(b.reportedAt || b.updatedAt || 0) - new Date(a.reportedAt || a.updatedAt || 0))[0] || null;
+}
+
+function accountWaitReportForBurger(burgerId) {
+  const account = getAccount();
+  if (!account) return null;
+  return eventWaitReports().find((report) => report.burgerId === burgerId && report.profileId === account.id) || null;
+}
+
+function waitReportBelongsToAccount(report, account = getAccount()) {
+  return Boolean(account && report?.profileId === account.id);
+}
+
+function saveLocalWaitReport(burgerId, waitTime, note = "") {
   const account = getAccount();
   if (!account) return false;
   const store = loadJsonStore(waitReportStoreKey);
@@ -410,7 +434,44 @@ function saveWaitReport(burgerId, waitTime, note = "") {
   return true;
 }
 
-function deleteWaitReport(burgerId) {
+async function saveWaitReport(burgerId, waitTime, note = "") {
+  const account = getAccount();
+  if (!account) return false;
+  const burger = getBurger(burgerId);
+  const now = new Date().toISOString();
+
+  if (isSupabaseReady() && supabaseWaitReportsSupported) {
+    const report = {
+      event_id: currentEventId,
+      food_item_id: burgerId,
+      profile_id: account.id,
+      wait_time: waitTime,
+      note: note.trim(),
+      updated_at: now
+    };
+
+    const { error } = await supabaseClient
+      .from("wait_reports")
+      .upsert(report, { onConflict: "event_id,food_item_id,profile_id" });
+
+    if (error) {
+      if (supabaseMissingRelationError(error, "wait_reports")) {
+        supabaseWaitReportsSupported = false;
+        showAppStatus("Wait report saved locally until the shared wait report table is available.", true);
+        return saveLocalWaitReport(burgerId, waitTime, note);
+      }
+      throw error;
+    }
+
+    await loadSupabaseWaitReports();
+    renderBurgerBoardState();
+    return true;
+  }
+
+  return saveLocalWaitReport(burgerId, waitTime, note);
+}
+
+function deleteLocalWaitReport(burgerId) {
   const account = getAccount();
   if (!account) return false;
   const store = loadJsonStore(waitReportStoreKey);
@@ -422,6 +483,34 @@ function deleteWaitReport(burgerId) {
   }
   saveJsonStore(waitReportStoreKey, store);
   return true;
+}
+
+async function deleteWaitReport(burgerId) {
+  const account = getAccount();
+  if (!account) return false;
+
+  if (isSupabaseReady() && supabaseWaitReportsSupported) {
+    const { error } = await supabaseClient
+      .from("wait_reports")
+      .delete()
+      .eq("event_id", currentEventId)
+      .eq("food_item_id", burgerId)
+      .eq("profile_id", account.id);
+
+    if (error) {
+      if (supabaseMissingRelationError(error, "wait_reports")) {
+        supabaseWaitReportsSupported = false;
+        return deleteLocalWaitReport(burgerId);
+      }
+      throw error;
+    }
+
+    await loadSupabaseWaitReports();
+    renderBurgerBoardState();
+    return true;
+  }
+
+  return deleteLocalWaitReport(burgerId);
 }
 
 function accountScheduleEntries() {
@@ -1360,6 +1449,47 @@ async function loadSupabaseSchedules() {
   }));
 }
 
+async function loadSupabaseWaitReports() {
+  if (!supabaseWaitReportsSupported) return;
+  const { data, error } = await supabaseClient
+    .from("wait_reports")
+    .select(selectWithOptionalProfiles("id,event_id,food_item_id,profile_id,wait_time,note,created_at,updated_at"))
+    .eq("event_id", currentEventId)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    if (supabaseReviewProfilesSupported && supabaseProfileJoinError(error)) {
+      supabaseReviewProfilesSupported = false;
+      await loadSupabaseWaitReports();
+      return;
+    }
+    if (supabaseMissingRelationError(error, "wait_reports")) {
+      supabaseWaitReportsSupported = false;
+      return;
+    }
+    throw error;
+  }
+
+  await loadSupabaseProfileNames((data || []).map((entry) => entry.profile_id));
+  remoteWaitReportsByEvent[currentEventId] = (data || []).map((entry) => {
+    const burger = getBurger(entry.food_item_id);
+    return {
+      id: entry.id,
+      eventId: entry.event_id,
+      burgerId: entry.food_item_id,
+      restaurant: burger.restaurant,
+      burger: burger.burger,
+      waitTime: entry.wait_time,
+      note: entry.note || "",
+      reporter: profileNameFromRow(entry),
+      profileId: entry.profile_id,
+      reportedAt: entry.updated_at || entry.created_at,
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at
+    };
+  });
+}
+
 async function refreshSupabaseData() {
   if (!isSupabaseReady()) return;
 
@@ -1375,7 +1505,8 @@ async function refreshSupabaseData() {
     loadSupabaseHidden(),
     loadSupabaseReviewLikes(),
     loadSupabaseReviewComments(),
-    loadSupabaseSchedules()
+    loadSupabaseSchedules(),
+    loadSupabaseWaitReports()
   ]);
   const failed = results
     .filter((result) => result.status === "rejected")
@@ -1389,7 +1520,8 @@ async function refreshSupabaseData() {
   const pendingOptionalTables = [
     !supabaseReviewLikesSupported && "likes",
     !supabaseReviewCommentsSupported && "comments",
-    !supabaseSchedulesSupported && "schedules"
+    !supabaseSchedulesSupported && "schedules",
+    !supabaseWaitReportsSupported && "wait reports"
   ].filter(Boolean);
 
   setAuthStatus(pendingOptionalTables.length
@@ -1456,6 +1588,7 @@ async function initializeSupabase() {
       remoteReviewLikesByEvent = {};
       remoteReviewCommentsByEvent = {};
       remoteSchedulesByEvent = {};
+      remoteWaitReportsByEvent = {};
       remoteProfileNames = {};
       setAuthStatus("Signed out. Log in with email and password when you are ready.");
     }
@@ -2523,6 +2656,7 @@ function renderBurgerList() {
       const visibleTags = displayTags(burger);
       const placeholderArt = burger.restaurantPhoto?.includes("restaurant-placeholder.svg");
       const waitReport = latestWaitReport(burger.id);
+      const canDeleteWaitReport = waitReportBelongsToAccount(waitReport);
       const availability = burger.availability?.length
         ? burger.availability.map((entry) => `<span><b>${escapeHtml(entry.dayLabel)}</b> ${escapeHtml(entry.hoursText)}</span>`).join("")
         : `<span>${escapeHtml(burger.hours || "Hours TBD")}</span>`;
@@ -2554,7 +2688,7 @@ function renderBurgerList() {
                     <b>${escapeHtml(waitReport.reporter)} reported ${escapeHtml(waitTimeLabel(waitReport.waitTime))}</b>
                     ${waitReport.note ? `<span>${escapeHtml(waitReport.note)}</span>` : ""}
                   </span>
-                  <button class="delete-wait-report" type="button" data-delete-wait-report="${escapeAttr(burger.id)}">Delete Time</button>
+                  ${canDeleteWaitReport ? `<button class="delete-wait-report" type="button" data-delete-wait-report="${escapeAttr(burger.id)}">Delete Time</button>` : ""}
                 </div>
               ` : ""}
             </div>
@@ -3090,7 +3224,7 @@ function openWaitReportDialog(burgerId) {
   }
 
   const burger = getBurger(burgerId);
-  const report = latestWaitReport(burgerId);
+  const report = accountWaitReportForBurger(burgerId);
   activeWaitBurgerId = burgerId;
   els.waitBurgerName.textContent = `${burger.restaurant} - ${burger.burger}`;
   els.waitReportSelect.value = report?.waitTime || "standard";
@@ -3776,6 +3910,7 @@ els.logoutButton.addEventListener("click", async () => {
     remoteReviewLikesByEvent = {};
     remoteReviewCommentsByEvent = {};
     remoteSchedulesByEvent = {};
+    remoteWaitReportsByEvent = {};
     remoteProfileNames = {};
     setAuthStatus("Signed out. Log in with email and password when you are ready.");
     els.loginDialog.close();
@@ -3904,7 +4039,7 @@ els.reviewGrid.addEventListener("keydown", (event) => {
   });
 });
 
-els.burgerList.addEventListener("click", (event) => {
+els.burgerList.addEventListener("click", async (event) => {
   const wantButton = event.target.closest("[data-want-burger]");
   const hideButton = event.target.closest("[data-hide-burger]");
   const previewButton = event.target.closest("[data-preview-photo]");
@@ -3919,9 +4054,13 @@ els.burgerList.addEventListener("click", (event) => {
     return;
   }
   if (deleteWaitButton) {
-    deleteWaitReport(deleteWaitButton.dataset.deleteWaitReport);
-    renderBurgerBoardState();
-    showAppStatus("Wait time report deleted.");
+    try {
+      await deleteWaitReport(deleteWaitButton.dataset.deleteWaitReport);
+      renderBurgerBoardState();
+      showAppStatus("Wait time report deleted.");
+    } catch (error) {
+      showAppStatus(`Could not delete wait report: ${error.message}`, true);
+    }
     return;
   }
   if (waitButton) {
@@ -4034,12 +4173,17 @@ els.scheduleList?.addEventListener("click", async (event) => {
 
 els.closeWaitDialog?.addEventListener("click", closeWaitReportDialog);
 els.cancelWaitReport?.addEventListener("click", closeWaitReportDialog);
-els.waitForm?.addEventListener("submit", (event) => {
+els.waitForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!activeWaitBurgerId) return;
-  saveWaitReport(activeWaitBurgerId, els.waitReportSelect.value, els.waitReportNoteInput.value);
-  closeWaitReportDialog();
-  renderBurgerBoardState();
+  try {
+    await saveWaitReport(activeWaitBurgerId, els.waitReportSelect.value, els.waitReportNoteInput.value);
+    closeWaitReportDialog();
+    renderBurgerBoardState();
+    showAppStatus("Wait report saved.");
+  } catch (error) {
+    showAppStatus(`Could not save wait report: ${error.message}`, true);
+  }
 });
 
 els.closeImageDialog.addEventListener("click", closeImageDialog);
