@@ -2347,6 +2347,7 @@ function markFeedPhotoOrientation(image) {
   const isPortrait = image.naturalHeight > image.naturalWidth * 1.05;
   frame.classList.toggle("is-portrait-photo", isPortrait);
   frame.classList.toggle("is-landscape-photo", !isPortrait);
+  image.style.objectPosition = isPortrait ? "center 78%" : "center";
 }
 
 function markRenderedFeedPhotoOrientations() {
