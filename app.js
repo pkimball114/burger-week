@@ -2226,9 +2226,7 @@ function renderFeed() {
   const visibleCount = Math.min(feedVisibleCount, allReviews.length);
   const reviews = allReviews.slice(0, visibleCount);
   const hasMore = visibleCount < allReviews.length;
-  els.resultCount.textContent = hasMore
-    ? `Showing ${visibleCount} of ${allReviews.length} reviews`
-    : `${allReviews.length} review${allReviews.length === 1 ? "" : "s"}`;
+  els.resultCount.textContent = `${allReviews.length} review${allReviews.length === 1 ? "" : "s"}`;
 
   if (!allReviews.length) {
     els.reviewGrid.innerHTML = $("#emptyTemplate").innerHTML;

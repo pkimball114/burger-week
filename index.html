@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=64">
+    <link rel="stylesheet" href="styles.css?v=66">
   </head>
   <body>
     <header class="hero">
@@ -120,17 +120,14 @@
           <h2 id="burgersTitle">Burger Board</h2>
           <p>Examine the options, mark the ones you want, hide the ones you don't.</p>
         </div>
-        <div class="board-filter-bar" aria-label="Burger Board filters">
-          <label>
-            <span>Wants</span>
-            <select id="wantScopeFilter">
-              <option value="all">All burgers</option>
-              <option value="group">Group Wants</option>
-              <option value="personal">Personal Wants</option>
-            </select>
-          </label>
-        </div>
         <div class="hype-list" id="hypeList" aria-label="Most hyped burgers"></div>
+        <div class="board-filter-bar" aria-label="Burger Board filters">
+          <select id="wantScopeFilter" aria-label="Filter Burger Board by wants">
+            <option value="all">Show all burgers</option>
+            <option value="personal">Show my wants</option>
+            <option value="group">Show all wants</option>
+          </select>
+        </div>
         <div class="burger-list" id="burgerList"></div>
       </section>
 
@@ -420,6 +417,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=64" defer></script>
+    <script src="app.js?v=66" defer></script>
   </body>
 </html>

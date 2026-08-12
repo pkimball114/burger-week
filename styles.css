@@ -532,7 +532,6 @@ main {
   margin-bottom: 18px;
 }
 
-.board-filter-bar label,
 .schedule-toolbar label {
   width: min(100%, 260px);
 }
@@ -547,6 +546,10 @@ main {
   color: var(--ink);
   padding: 10px 12px;
   box-shadow: 3px 3px 0 var(--ink);
+}
+
+.board-filter-bar select {
+  width: min(100%, 260px);
 }
 
 .filter-check {
