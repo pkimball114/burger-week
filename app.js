@@ -214,6 +214,8 @@ let filters = {
 };
 let feedVisibleCount = feedPageSize;
 let activeFeedReviewId = "";
+let topRankedScope = "personal";
+let topRankedIndexByScope = { personal: 0, group: 0 };
 let leaderboardExpanded = false;
 
 function fallbackEvent() {
@@ -2159,6 +2161,37 @@ function summarizeReviews(reviews) {
   };
 }
 
+function rankedBurgersFromReviews(reviews) {
+  const byBurger = new Map();
+  reviews.forEach((review) => {
+    const rating = Number(review.rating);
+    if (!Number.isFinite(rating)) return;
+
+    if (!byBurger.has(review.burgerId)) {
+      byBurger.set(review.burgerId, {
+        burger: getBurger(review.burgerId),
+        ratingTotal: 0,
+        count: 0
+      });
+    }
+
+    const entry = byBurger.get(review.burgerId);
+    entry.ratingTotal += rating;
+    entry.count += 1;
+  });
+
+  return [...byBurger.values()]
+    .map((entry) => ({
+      ...entry,
+      average: entry.count ? entry.ratingTotal / entry.count : 0
+    }))
+    .sort((a, b) =>
+      b.average - a.average ||
+      b.count - a.count ||
+      a.burger.restaurant.localeCompare(b.burger.restaurant)
+    );
+}
+
 function median(values) {
   const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
   if (!sorted.length) return 0;
@@ -2261,7 +2294,11 @@ function getFilteredReviews() {
     .sort((a, b) => {
       if (filters.sort === "rating") return b.rating - a.rating || new Date(b.createdAt) - new Date(a.createdAt);
       if (filters.sort === "restaurant") return a.burger.restaurant.localeCompare(b.burger.restaurant);
-      if (filters.sort === "available") return (a.burger.available[0] || "").localeCompare(b.burger.available[0] || "");
+      if (filters.sort === "visited") {
+        const aStats = burgerReviewStats(a.burgerId);
+        const bStats = burgerReviewStats(b.burgerId);
+        return bStats.count - aStats.count || bStats.avg - aStats.avg || new Date(b.createdAt) - new Date(a.createdAt);
+      }
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
 }
@@ -2273,12 +2310,27 @@ function renderStats() {
   const activeStatsScope = canShowPersonalStats ? statsScope : "group";
   const personalReviews = canShowPersonalStats ? reviews.filter((review) => reviewBelongsToAccount(review, account)) : [];
   const scopedSummary = summarizeReviews(activeStatsScope === "personal" ? personalReviews : reviews);
-  const topReview = [...reviews].sort((a, b) => b.rating - a.rating)[0];
-  const topSpot = topReview ? getBurger(topReview.burgerId).restaurant : "No reviews";
+  const groupRankings = rankedBurgersFromReviews(reviews);
+  const personalRankings = canShowPersonalStats ? rankedBurgersFromReviews(personalReviews) : [];
+  const rankingScopes = [
+    canShowPersonalStats && personalRankings.length ? "personal" : "",
+    groupRankings.length ? "group" : ""
+  ].filter(Boolean);
+  if (!rankingScopes.includes(topRankedScope)) {
+    topRankedScope = rankingScopes[0] || "group";
+  }
+  const topRankedList = topRankedScope === "personal" ? personalRankings : groupRankings;
+  const topRankedIndex = topRankedList.length
+    ? Math.min(topRankedIndexByScope[topRankedScope] || 0, topRankedList.length - 1)
+    : 0;
+  topRankedIndexByScope[topRankedScope] = topRankedIndex;
+  const topRanked = topRankedList[topRankedIndex] || null;
+  const totalRankedOptions = groupRankings.length + personalRankings.length;
   const topWantedList = mostWantedBurgers(5);
   const wantedIndex = topWantedList.length ? wantedStatIndex % topWantedList.length : 0;
   const topWanted = topWantedList[wantedIndex];
   const scopeLabel = activeStatsScope === "personal" ? "Personal" : "Group";
+  const topRankedScopeLabel = topRankedScope === "personal" ? "Personal" : "Group";
   const scopeButtonAttributes = canShowPersonalStats
     ? `type="button" data-toggle-stats-scope aria-label="Show ${activeStatsScope === "personal" ? "group" : "personal"} stats"`
     : "";
@@ -2306,8 +2358,13 @@ function renderStats() {
       attributes: scopeButtonAttributes
     },
     {
-      label: "Top Right Now",
-      value: topSpot
+      label: "Top Ranked",
+      value: topRanked ? topRanked.burger.restaurant : "No rankings yet",
+      detail: topRanked ? `${topRankedScopeLabel} #${topRankedIndex + 1} of ${topRankedList.length} · ${formatRating(topRanked.average)} avg` : "",
+      interactive: totalRankedOptions > 1,
+      attributes: topRanked
+        ? `type="button" data-cycle-top-ranked data-top-ranked-scope="${topRankedScope}" data-top-ranked-index="${topRankedIndex}" data-personal-ranked-count="${personalRankings.length}" data-group-ranked-count="${groupRankings.length}" aria-label="Show next top ranked burger"`
+        : ""
     },
     {
       label: "Most Wanted",
@@ -2428,7 +2485,7 @@ function buildLeaderboardData() {
     }
   });
 
-  const connoisseurs = [...byReviewer.values()]
+  const eaters = [...byReviewer.values()]
     .map((entry) => ({
       ...entry,
       averageRating: entry.reviewCount ? entry.ratingTotal / entry.reviewCount : 0,
@@ -2440,12 +2497,12 @@ function buildLeaderboardData() {
       a.name.localeCompare(b.name)
     );
 
-  const mostOutspoken = [...connoisseurs].sort((a, b) =>
+  const mostOutspoken = [...eaters].sort((a, b) =>
     b.noteLength - a.noteLength ||
     b.reviewCount - a.reviewCount ||
     a.name.localeCompare(b.name)
   )[0] || null;
-  const mostControversial = [...connoisseurs]
+  const mostControversial = [...eaters]
     .filter((entry) => entry.deviationCount && entry.averageDeviation > 0)
     .sort((a, b) =>
       b.averageDeviation - a.averageDeviation ||
@@ -2454,8 +2511,8 @@ function buildLeaderboardData() {
     )[0] || null;
 
   return {
-    connoisseurs,
-    topThree: connoisseurs.slice(0, 3),
+    eaters,
+    topThree: eaters.slice(0, 3),
     mostOutspoken,
     mostControversial
   };
@@ -2466,7 +2523,7 @@ function highestBurgerLabel(review) {
   return `${review.burger.restaurant} - ${review.burger.burger}`;
 }
 
-function renderLeaderboardRankTable(rows, { includeBurger = false } = {}) {
+function renderLeaderboardRankTable(rows, { includeBurger = false, crownLeader = false } = {}) {
   if (!rows.length) {
     return `
       <div class="empty-state">
@@ -2477,11 +2534,11 @@ function renderLeaderboardRankTable(rows, { includeBurger = false } = {}) {
   }
 
   return `
-    <table class="leaderboard-table">
+    <table class="leaderboard-table ${includeBurger ? "is-wide" : ""}">
       <thead>
         <tr>
           <th scope="col">Rank</th>
-          <th scope="col">Connoisseur</th>
+          <th scope="col">Eater</th>
           <th scope="col">Reviews</th>
           ${includeBurger ? `<th scope="col">Highest Ranked Burger</th>` : ""}
         </tr>
@@ -2490,7 +2547,7 @@ function renderLeaderboardRankTable(rows, { includeBurger = false } = {}) {
         ${rows.map((entry, index) => `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(entry.name)}</td>
+            <td>${crownLeader && index === 0 ? `<span class="leaderboard-crown" aria-label="Top ranked eater" title="Top ranked eater">♛</span>` : ""}${escapeHtml(entry.name)}</td>
             <td>${entry.reviewCount}</td>
             ${includeBurger ? `<td>${escapeHtml(highestBurgerLabel(entry.highestReview))}</td>` : ""}
           </tr>
@@ -2513,19 +2570,19 @@ function renderLeaderboard() {
   if (!els.leaderboardTopThree || !els.leaderboardAwards || !els.leaderboardTable) return;
 
   const leaderboard = buildLeaderboardData();
-  const visibleConnoisseurs = leaderboardExpanded
-    ? leaderboard.connoisseurs
-    : leaderboard.connoisseurs.slice(0, leaderboardDefaultVisibleCount);
+  const visibleEaters = leaderboardExpanded
+    ? leaderboard.eaters
+    : leaderboard.eaters.slice(0, leaderboardDefaultVisibleCount);
 
-  els.leaderboardTopThree.innerHTML = renderLeaderboardRankTable(leaderboard.topThree);
+  els.leaderboardTopThree.innerHTML = renderLeaderboardRankTable(leaderboard.topThree, { crownLeader: true });
   els.leaderboardAwards.innerHTML = [
     renderLeaderboardAward("Most Outspoken Eater", leaderboard.mostOutspoken),
     renderLeaderboardAward("Most Controversial", leaderboard.mostControversial)
   ].join("");
-  els.leaderboardTable.innerHTML = renderLeaderboardRankTable(visibleConnoisseurs, { includeBurger: true });
+  els.leaderboardTable.innerHTML = renderLeaderboardRankTable(visibleEaters, { includeBurger: true });
 
   if (els.leaderboardToggle) {
-    const canExpand = leaderboard.connoisseurs.length > leaderboardDefaultVisibleCount;
+    const canExpand = leaderboard.eaters.length > leaderboardDefaultVisibleCount;
     els.leaderboardToggle.hidden = !canExpand;
     els.leaderboardToggle.textContent = leaderboardExpanded ? "Show Top 10" : "Show All";
     els.leaderboardToggle.setAttribute("aria-expanded", String(leaderboardExpanded));
@@ -2687,7 +2744,11 @@ function sortBurgerBoard(burgers) {
       return bStats.avg - aStats.avg || bStats.count - aStats.count || a.restaurant.localeCompare(b.restaurant);
     }
     if (filters.sort === "restaurant") return a.restaurant.localeCompare(b.restaurant);
-    if (filters.sort === "available") return (a.available[0] || "").localeCompare(b.available[0] || "") || a.restaurant.localeCompare(b.restaurant);
+    if (filters.sort === "visited") {
+      const aStats = burgerReviewStats(a.id);
+      const bStats = burgerReviewStats(b.id);
+      return bStats.count - aStats.count || bStats.avg - aStats.avg || a.restaurant.localeCompare(b.restaurant);
+    }
     return 0;
   });
 }
@@ -3847,10 +3908,40 @@ els.controlsToggle.addEventListener("click", () => {
 
 els.statsGrid.addEventListener("click", (event) => {
   const scopeButton = event.target.closest("[data-toggle-stats-scope]");
+  const topRankedButton = event.target.closest("[data-cycle-top-ranked]");
   const wantedButton = event.target.closest("[data-cycle-most-wanted]");
 
   if (scopeButton) {
     statsScope = statsScope === "personal" ? "group" : "personal";
+    topRankedScope = statsScope;
+    topRankedIndexByScope[topRankedScope] = 0;
+    renderStats();
+    return;
+  }
+
+  if (topRankedButton) {
+    const personalCount = Number(topRankedButton.dataset.personalRankedCount || 0);
+    const groupCount = Number(topRankedButton.dataset.groupRankedCount || 0);
+    const scopes = [
+      personalCount ? "personal" : "",
+      groupCount ? "group" : ""
+    ].filter(Boolean);
+    if (!scopes.length) return;
+
+    const currentScope = scopes.includes(topRankedButton.dataset.topRankedScope)
+      ? topRankedButton.dataset.topRankedScope
+      : scopes[0];
+    const currentCount = currentScope === "personal" ? personalCount : groupCount;
+    let nextScope = currentScope;
+    let nextIndex = Number(topRankedButton.dataset.topRankedIndex || 0) + 1;
+
+    if (nextIndex >= currentCount) {
+      nextScope = scopes[(scopes.indexOf(currentScope) + 1) % scopes.length];
+      nextIndex = 0;
+    }
+
+    topRankedScope = nextScope;
+    topRankedIndexByScope[nextScope] = nextIndex;
     renderStats();
     return;
   }

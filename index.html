@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=74">
+    <link rel="stylesheet" href="styles.css?v=77">
   </head>
   <body>
     <header class="hero">
@@ -86,7 +86,7 @@
                 <option value="recent">Newest</option>
                 <option value="rating">Highest rated</option>
                 <option value="restaurant">Restaurant A-Z</option>
-                <option value="available">Available soonest</option>
+                <option value="visited">Most visited</option>
               </select>
             </label>
             <label class="filter-check">
@@ -211,13 +211,13 @@
         </div>
         <div class="leaderboard-stack">
           <div class="leaderboard-panel">
-            <h3>Top 3 Connoisseurs</h3>
+            <h3>Top 3 Eaters</h3>
             <div class="leaderboard-table-wrap" id="leaderboardTopThree"></div>
           </div>
           <div class="leaderboard-awards" id="leaderboardAwards"></div>
           <div class="leaderboard-panel">
             <div class="leaderboard-panel-heading">
-              <h3>Top Connoisseurs</h3>
+              <h3>Top Eaters</h3>
               <button class="ghost-button compact-button" id="leaderboardToggle" type="button" aria-expanded="false" hidden>Show All</button>
             </div>
             <div class="leaderboard-table-wrap" id="leaderboardTable"></div>
@@ -438,6 +438,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=74" defer></script>
+    <script src="app.js?v=77" defer></script>
   </body>
 </html>

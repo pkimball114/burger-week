@@ -1081,6 +1081,7 @@ legend {
 .leaderboard-stack {
   display: grid;
   gap: 18px;
+  min-width: 0;
 }
 
 .leaderboard-panel,
@@ -1092,6 +1093,8 @@ legend {
 }
 
 .leaderboard-panel {
+  min-width: 0;
+  overflow: hidden;
   padding: 14px;
 }
 
@@ -1138,14 +1141,27 @@ legend {
 }
 
 .leaderboard-table-wrap {
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .leaderboard-table {
   width: 100%;
-  min-width: 520px;
+  min-width: 360px;
   border-collapse: collapse;
   text-align: left;
+}
+
+.leaderboard-table.is-wide {
+  min-width: 520px;
+}
+
+.leaderboard-crown {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--bun-deep);
+  font-weight: 950;
 }
 
 .leaderboard-table th,
