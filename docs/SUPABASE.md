@@ -23,6 +23,8 @@ That last point matters: if you add rows to `data/burger-week-2026.csv` and push
 
 If you already applied the main schema before feedback reporting was added, apply [docs/supabase-feedback-reports-migration.sql](supabase-feedback-reports-migration.sql). The app only inserts feedback reports; there is no client-side report viewer. Query `public.feedback_reports` directly from Supabase when you want to review bug reports and feature requests.
 
+If you already applied the main schema before the hidden manual review score was added, apply [docs/supabase-review-boob-migration.sql](supabase-review-boob-migration.sql). The app never inserts or updates `reviews.boob`; manually set integer values in Supabase when you want reviews to appear under the "Most boob" sort.
+
 ## 2. Configure Auth URLs
 
 In Supabase Dashboard:

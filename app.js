@@ -168,6 +168,7 @@ let supabaseClient = null;
 let supabaseSession = null;
 let supabaseProfile = null;
 let supabaseReviewWaitTimeSupported = true;
+let supabaseReviewBoobSupported = true;
 let supabaseReviewProfilesSupported = true;
 let supabaseReviewLikesSupported = true;
 let supabaseReviewCommentsSupported = true;
@@ -1250,6 +1251,7 @@ async function mapSupabaseReview(row) {
     rating: Number(row.rating),
     notes: row.notes || "",
     waitTime: row.wait_time || waitTimeFromNotes,
+    boob: reviewBoobValue({ boob: row.boob }),
     photo: await signedPhotoUrl(row.photo_path),
     photoPath: row.photo_path || "",
     createdAt: row.created_at,
@@ -1266,6 +1268,7 @@ function supabaseReviewSelect() {
     "rating",
     "notes",
     supabaseReviewWaitTimeSupported ? "wait_time" : "",
+    supabaseReviewBoobSupported ? "boob" : "",
     "photo_path",
     "created_at",
     "updated_at",
@@ -1287,6 +1290,11 @@ async function loadSupabaseReviews() {
   if (error) {
     if (supabaseReviewWaitTimeSupported && supabaseMissingColumnError(error, "wait_time")) {
       supabaseReviewWaitTimeSupported = false;
+      await loadSupabaseReviews();
+      return;
+    }
+    if (supabaseReviewBoobSupported && supabaseMissingColumnError(error, "boob")) {
+      supabaseReviewBoobSupported = false;
       await loadSupabaseReviews();
       return;
     }
@@ -2126,6 +2134,13 @@ function personalVisitedBurgerIds() {
   return new Set(getReviews().filter((review) => reviewBelongsToAccount(review, account)).map((review) => review.burgerId));
 }
 
+function reviewBoobValue(review) {
+  const rawValue = review?.boob;
+  if (rawValue === null || rawValue === undefined || rawValue === "") return null;
+  const value = Number(rawValue);
+  return Number.isInteger(value) ? value : null;
+}
+
 function burgerSearchText(burger) {
   return [
     burger.restaurant,
@@ -2281,6 +2296,7 @@ function getFilteredReviews() {
         review.burger.neighborhood,
         review.burger.tags.join(" ")
       ].join(" ").toLowerCase();
+      const matchesBoobSort = filters.sort !== "boob" || reviewBoobValue(review) !== null;
 
       return (
         (!search || haystack.includes(search)) &&
@@ -2288,6 +2304,7 @@ function getFilteredReviews() {
         (filters.friend === "all" || review.reviewer === filters.friend) &&
         (!filters.openNow || burgerOpenAt(review.burger)) &&
         (!filters.hideVisited || !visitedIds.has(review.burgerId)) &&
+        matchesBoobSort &&
         review.rating >= filters.rating
       );
     })
@@ -2299,6 +2316,7 @@ function getFilteredReviews() {
         const bStats = burgerReviewStats(b.burgerId);
         return bStats.count - aStats.count || bStats.avg - aStats.avg || new Date(b.createdAt) - new Date(a.createdAt);
       }
+      if (filters.sort === "boob") return reviewBoobValue(b) - reviewBoobValue(a) || new Date(b.createdAt) - new Date(a.createdAt);
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
 }
@@ -2736,6 +2754,17 @@ function burgerReviewStats(burgerId) {
   return { count: reviews.length, avg };
 }
 
+function burgerBoobStats(burgerId) {
+  const values = getReviews()
+    .filter((review) => review.burgerId === burgerId)
+    .map(reviewBoobValue)
+    .filter((value) => value !== null);
+  return {
+    count: values.length,
+    max: values.length ? Math.max(...values) : null
+  };
+}
+
 function sortBurgerBoard(burgers) {
   return [...burgers].sort((a, b) => {
     if (filters.sort === "rating") {
@@ -2748,6 +2777,11 @@ function sortBurgerBoard(burgers) {
       const aStats = burgerReviewStats(a.id);
       const bStats = burgerReviewStats(b.id);
       return bStats.count - aStats.count || bStats.avg - aStats.avg || a.restaurant.localeCompare(b.restaurant);
+    }
+    if (filters.sort === "boob") {
+      const aStats = burgerBoobStats(a.id);
+      const bStats = burgerBoobStats(b.id);
+      return (bStats.max ?? Number.NEGATIVE_INFINITY) - (aStats.max ?? Number.NEGATIVE_INFINITY) || bStats.count - aStats.count || a.restaurant.localeCompare(b.restaurant);
     }
     return 0;
   });
@@ -3784,7 +3818,7 @@ function openReviewInFeed(reviewId) {
 
   let filteredReviews = getFilteredReviews();
   if (!filteredReviews.some((entry) => entry.id === reviewId)) {
-    filters = { ...filters, search: "", neighborhood: "all", friend: "all", rating: 0, openNow: false, hideVisited: false };
+    filters = { ...filters, search: "", neighborhood: "all", friend: "all", rating: 0, sort: "recent", openNow: false, hideVisited: false };
     setFilterControlValues();
     hydrateFilters();
     filteredReviews = getFilteredReviews();

@@ -45,6 +45,7 @@ create table public.reviews (
   rating numeric(3, 2) not null check (rating >= 0 and rating <= 5 and mod(rating * 100, 25) = 0),
   notes text,
   wait_time text check (wait_time in ('immediate', 'standard', 'long', 'very-long')),
+  boob integer,
   photo_path text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
