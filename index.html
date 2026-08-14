@@ -8,7 +8,7 @@
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=78">
+    <link rel="stylesheet" href="styles.css?v=79">
   </head>
   <body>
     <header class="hero">
@@ -18,7 +18,7 @@
         <div class="topbar-brand-row">
           <a class="brand" href="#feed" aria-label="Burger Week home">
             <span class="brand-mark" aria-hidden="true">BW</span>
-            <span>Burger Week</span>
+            <span data-boob-sort-unlock>Burger Week</span>
           </a>
           <button class="feedback-button" id="feedbackButton" type="button" aria-label="Report a bug or request a feature">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -39,7 +39,7 @@
       </nav>
       <div class="hero-copy">
         <p class="eyebrow">Aug 10-16, 2026 · $10 burgers</p>
-        <h1>Burger Week</h1>
+        <h1 data-boob-sort-unlock>Burger Week</h1>
         <p class="lede">Find the best burger in the city</p>
         <button class="primary-action" id="openComposer" type="button">Add Review</button>
       </div>
@@ -87,7 +87,6 @@
                 <option value="rating">Highest rated</option>
                 <option value="restaurant">Restaurant A-Z</option>
                 <option value="visited">Most visited</option>
-                <option value="boob">Most boob</option>
               </select>
             </label>
             <label class="filter-check">
@@ -439,6 +438,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.min.js" defer></script>
     <script src="assets/vendor/leaflet/leaflet.js" defer></script>
     <script src="config/supabase.js" defer></script>
-    <script src="app.js?v=78" defer></script>
+    <script src="app.js?v=79" defer></script>
   </body>
 </html>

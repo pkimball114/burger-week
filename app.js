@@ -21,12 +21,14 @@ const scheduleStoreKey = "burger-week-schedule-v1";
 const feedbackStoreKey = "burger-week-feedback-v1";
 const reviewLikeStoreKey = "burger-week-review-likes-v1";
 const reviewCommentStoreKey = "burger-week-review-comments-v1";
+const boobSortUnlockStoreKey = "burger-week-boob-sort-unlocked-v1";
 const supabasePhotoBucket = "burger-review-photos";
 const reviewPhotoMaxDimension = 1600;
 const reviewPhotoJpegQuality = 0.82;
 const feedPortraitFriendPhotoObjectPosition = "center 45%";
 const feedPageSize = 12;
 const leaderboardDefaultVisibleCount = 10;
+const boobSortUnlockTapGoal = 10;
 const testAccount = {
   id: "local-test-user",
   displayName: "Test",
@@ -56,6 +58,7 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 const els = {
   eventPicker: $("#eventPicker"),
+  boobSortUnlockTargets: $$("[data-boob-sort-unlock]"),
   controlsBand: $("#controlsBand"),
   controlsToggle: $("#controlsToggle"),
   controlsContent: $("#controlsContent"),
@@ -218,6 +221,7 @@ let activeFeedReviewId = "";
 let topRankedScope = "personal";
 let topRankedIndexByScope = { personal: 0, group: 0 };
 let leaderboardExpanded = false;
+let boobSortUnlockTapCount = 0;
 
 function fallbackEvent() {
   const dates = ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-16"];
@@ -2141,6 +2145,49 @@ function reviewBoobValue(review) {
   return Number.isInteger(value) ? value : null;
 }
 
+function boobSortUnlocked() {
+  return localStorage.getItem(boobSortUnlockStoreKey) === "true";
+}
+
+function setBoobSortUnlocked() {
+  localStorage.setItem(boobSortUnlockStoreKey, "true");
+}
+
+function sortOptionExists(value) {
+  return Array.from(els.sortSelect.options).some((option) => option.value === value);
+}
+
+function syncBoobSortOption() {
+  const option = els.sortSelect.querySelector('option[value="boob"]');
+  if (boobSortUnlocked()) {
+    if (!option) {
+      const boobOption = document.createElement("option");
+      boobOption.value = "boob";
+      boobOption.textContent = "Most boob";
+      els.sortSelect.append(boobOption);
+    }
+    return;
+  }
+
+  option?.remove();
+  if (filters.sort === "boob" || !sortOptionExists(filters.sort)) {
+    filters.sort = "recent";
+  }
+}
+
+function handleBoobSortUnlockTap(event) {
+  if (boobSortUnlocked()) return;
+
+  event.preventDefault();
+  boobSortUnlockTapCount += 1;
+  if (boobSortUnlockTapCount < boobSortUnlockTapGoal) return;
+
+  setBoobSortUnlocked();
+  syncBoobSortOption();
+  setFilterControlValues();
+  showAppStatus("Secret sort unlocked.");
+}
+
 function burgerSearchText(burger) {
   return [
     burger.restaurant,
@@ -2274,6 +2321,7 @@ function hydrateFilters() {
   if (els.wantScopeFilter) {
     els.wantScopeFilter.value = filters.wantScope;
   }
+  syncBoobSortOption();
 
   els.neighborhoodFilter.value = areas.includes(currentArea) ? currentArea : "all";
   els.friendFilter.value = friends.includes(currentFriend) ? currentFriend : "all";
@@ -3804,6 +3852,7 @@ function maybeLoadMoreFeed() {
 }
 
 function setFilterControlValues() {
+  syncBoobSortOption();
   els.searchInput.value = filters.search;
   els.ratingFilter.value = String(filters.rating);
   els.sortSelect.value = filters.sort;
@@ -3873,6 +3922,10 @@ els.sortSelect.addEventListener("change", (event) => {
   filters.sort = event.target.value;
   resetFeedPagination();
   renderFilteredViews();
+});
+
+els.boobSortUnlockTargets.forEach((target) => {
+  target.addEventListener("click", handleBoobSortUnlockTap);
 });
 
 els.openNowFilter?.addEventListener("change", (event) => {
